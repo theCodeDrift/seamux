@@ -1,5 +1,12 @@
 # seamux
 
+## 0.2.1
+
+### Patch Changes
+
+- 8e035e7: A message holding an invisible character, such as a zero-width space or soft hyphen that came in with pasted text, now gets sent. Claude Code strips the character and waits for a second Enter, which seamux didn't notice, so the message sat in the chat's prompt box under "Removed 1 invisible character". seamux now presses that Enter.
+- 2c9d99a: A long message sent to a Claude Code chat now arrives whole and gets sent. Before, Claude Code 2.1.285 could take one for a paste, drop parts of it, and miss the Enter, which left the message sitting unsent in the chat's prompt box while the board showed nothing sent. seamux now types it a little at a time, with Shift+Enter between lines instead of pasting, and, if the message is still in the box, types a carriage return to send it, since a chat can ignore cmux's Enter or take it as a line break. If it still won't go, the board says so, and a queued message isn't typed a second time.
+
 ## 0.2.0
 
 ### Minor Changes
