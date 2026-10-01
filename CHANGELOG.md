@@ -1,5 +1,18 @@
 # seamux
 
+## 0.2.2
+
+### Patch Changes
+
+- 5bf48ae: When seamux can't reach cmux, the board now says why and how to fix it on a full-page notice, instead of two warnings and a failed send each time: seamux started outside cmux, cmux not running or not installed, cmux's socket turned off, or a socket password it doesn't have. seamux also finds the `cmux` command in cmux's app bundle when it isn't on your `PATH`.
+- b98f750: Two messages sent to the same chat at once now arrive in the order they were sent, where before either could go first.
+- 5671185: Cards have a minimize button between pin and close: it folds the card down to its name and buttons, and the restore button in its place opens it back up. The browser remembers which cards are minimized.
+- c200c43: Two things typed into the same chat at once, such as a queued message going out while you send one, no longer interleave their keys: the board types into a chat one action at a time.
+- 7a78b4a: A chat whose pid cmux has lost track of is no longer shown as "Not in a cmux surface": seamux asks Claude Code whether it's still running, so you can reply to it and stop it from the board again.
+- b98f750: Chats that stop on a failed request, such as "Can't reach the API server", "529 Overloaded" or "Your computer went to sleep mid-response", now pick themselves back up. The board checks every 10 seconds whether the API answers, and once it does, sends each such chat `continue`: 30 seconds after the error, then 60 and 120 seconds after each one that follows, then leaves it to you. ATTENTION no longer shows a card for these errors; the chat's own card shows the error muted in place of a reply. ATTENTION's card also keeps the service's name in view beside a long status.
+- 984a9b8: Before typing a message, `/exit` or `/rename` into a Claude Code or Codex chat, the board now empties its prompt box, so a draft left there is no longer sent along with the message, and a box in shell mode (led by `!`) no longer runs it as shell commands or keeps a close from going through. Claude Code keeps what was cleared: press Ctrl+Y in the chat to get it back.
+- f561f8b: The board through the Cloudflare tunnel no longer gets stuck on an old stylesheet after an update, which left it without colours: everything the board answers through the tunnel tells Cloudflare not to cache it, and the dev server's stylesheet gets a new URL each time it starts. If the board through the tunnel still looks unstyled after updating, purge the hostname's cache in the Cloudflare dashboard once.
+
 ## 0.2.1
 
 ### Patch Changes
