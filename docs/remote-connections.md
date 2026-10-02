@@ -1,13 +1,13 @@
 # Remote connections
 
-Out of the box the board answers only this Mac: a request must come from this Mac, addressed to `localhost`, `127.0.0.1` or `[::1]`. Any other name, even one that points at this Mac, is refused, so a website can't point its own domain at `127.0.0.1` and read the board. The config dialog's Remote tab has two other ways in, one at a time:
+Out of the box the board answers only this Mac: a request must come from this Mac, addressed to `localhost`, `127.0.0.1` or `[::1]`. Any other name, even one that points at this Mac, is refused, so a website can't point its own domain at `127.0.0.1` and read the board. The config dialog's Remote tab has two other ways in, either or both:
 
 - **mDNS**, for devices on the same network: the board answers at this Mac's `.local` name, behind its HTTP Basic password.
 - **A Cloudflare tunnel**, for anywhere: the board answers at a hostname of yours, behind Cloudflare Access.
 
 On a phone the board shows one column at a time; see [Columns](../README.md#columns). Through the tunnel it can also be added to the Home Screen, where it opens full screen with its own icon.
 
-Both sit under one switch, **Enable remote connections**. With it off, neither is open and the Remote tab hides their settings. Only one of them is on at a time: turning mDNS on turns the tunnel off, and the other way round.
+Both sit under one switch, **Enable remote connections**. With it off, neither is open and the Remote tab hides their settings. With it on, each has its own switch, and both can be on at once: say, a phone at home over mDNS and a laptop elsewhere through the tunnel. Each keeps its own login: the password at the `.local` name, Cloudflare Access at the tunnel's hostname.
 
 Whenever `SEAMUX_USER` and `SEAMUX_PASS` are set, every request asks for them, from this Mac too and for every file the board serves, except through the tunnel, where Cloudflare Access is the login. Every switch on the tab can only be turned on from this Mac, and turns off from anywhere, so a lost phone can't reopen the board once you've shut it.
 
@@ -39,7 +39,7 @@ Turning mDNS off shuts the network out straight away, and the board then restart
 
 <!-- Screenshot: the Enable Cloudflare Tunnel section, expanded -->
 
-A Cloudflare named tunnel connects out from this Mac to Cloudflare, so the board keeps listening on loopback only, and nothing on your network changes. It answers `localhost` as it does out of the box, and the tunnel's hostname only for `cloudflared`, on this Mac. Turning the tunnel on turns mDNS off. Cloudflare Access sits in front of it and asks you to log in.
+A Cloudflare named tunnel connects out from this Mac to Cloudflare, so the tunnel alone keeps the board listening on loopback only, and nothing on your network changes. It answers `localhost` as it does out of the box, and the tunnel's hostname only for `cloudflared`, on this Mac. With mDNS on too, the board listens on the network, but a request from the network addressed to the tunnel's hostname is still refused, so nothing there can pass as `cloudflared`. Cloudflare Access sits in front of it and asks you to log in.
 
 The Remote tab's **Enable Cloudflare Tunnel** section starts collapsed, and opens by itself once any of its variables is set.
 
@@ -75,4 +75,4 @@ In `.seamux.json`, so they survive restarts:
 { "port": 54321, "remote": true, "mdns": false, "tunnel": true }
 ```
 
-`remote` is **Enable remote connections**. Before mDNS, `remote` was the tunnel's own switch, so a file without `tunnel` keeps the tunnel as `remote` has it.
+`remote` is **Enable remote connections**; `mdns` and `tunnel` apply only while it's on. Before mDNS, `remote` was the tunnel's own switch, so a file without `tunnel` keeps the tunnel as `remote` has it.

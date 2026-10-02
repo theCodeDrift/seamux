@@ -604,7 +604,7 @@ function RemoteTab({ remote }: { remote: RemoteStatus }) {
           label="Enable remote connections"
         >
           Lets other devices reach the board, over your network with mDNS or
-          from anywhere through a Cloudflare tunnel, one at a time. Off, or with
+          from anywhere through a Cloudflare tunnel, or both. Off, or with
           neither on, it answers only this Mac, at localhost, 127.0.0.1 or
           [::1]. It can only be turned on from this Mac, and turns off from
           anywhere.
@@ -661,8 +661,7 @@ function MdnsSetting({
         . Turning this on lets the board accept more than the 127.0.0.1
         loopback: it listens on every network this Mac joins, and restarts to do
         so. Every request is asked for SEAMUX_USER and SEAMUX_PASS, which
-        plain HTTP sends unencrypted, so use it on networks you trust. Turning
-        it on turns the Cloudflare Tunnel off.{" "}
+        plain HTTP sends unencrypted, so use it on networks you trust.{" "}
         {state}
         {mdns.viaLan &&
           " You're viewing this over the network, so turning it off disconnects this page."}
@@ -710,8 +709,8 @@ function TunnelSetting({
           Cloudflare Access. Through the tunnel the board asks for no password
           of its own: it checks every request's Access token instead, and
           refuses any request without a valid one, so it stays shut even if the
-          Access application is removed. The board answers only this Mac and
-          the tunnel, so turning it on turns mDNS off.
+          Access application is removed. The tunnel's hostname is answered
+          only for cloudflared, on this Mac, even with mDNS on.
         </p>
         <SwitchRow
           checked={remote.wanted}

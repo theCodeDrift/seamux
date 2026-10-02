@@ -1,18 +1,17 @@
-// The board runs in one of three modes, which the Remote tab picks:
+// The board always answers a request from this Mac addressed to localhost,
+// 127.0.0.1 or [::1], and binds 127.0.0.1 for nothing else. The Remote tab
+// opens two more ways in, each on its own switch, either or both:
 //
-// - local: it binds 127.0.0.1 and answers only a request from this Mac
-//   addressed to localhost, 127.0.0.1 or [::1]. The rest of the modes answer
-//   those too.
-// - mdns: it listens on every interface and also answers this Mac's Bonjour
+// - mDNS: it listens on every interface and also answers this Mac's Bonjour
 //   name, <LocalHostName>.local, from anywhere. That needs the HTTP Basic
 //   credentials set.
-// - tunnel: a Cloudflare named tunnel from SEAMUX_CF_DOMAIN to the board, with
-//   Cloudflare Access in front of it. The board binds 127.0.0.1 as in local
-//   mode, and also answers cloudflared, on this Mac, at the tunnel's
-//   hostname. A request there must carry a valid Access token for
-//   SEAMUX_CF_TEAM and SEAMUX_CF_AUD, checked here, and then needs no HTTP
-//   Basic credentials. If the Access application is ever deleted or
-//   loosened, the board still refuses.
+// - the tunnel: a Cloudflare named tunnel from SEAMUX_CF_DOMAIN to the board,
+//   with Cloudflare Access in front of it. The board also answers cloudflared,
+//   on this Mac, at the tunnel's hostname, and only from loopback, even while
+//   mDNS has it listening on the network. A request there must carry a valid
+//   Access token for SEAMUX_CF_TEAM and SEAMUX_CF_AUD, checked here, and then
+//   needs no HTTP Basic credentials. If the Access application is ever
+//   deleted or loosened, the board still refuses.
 //
 // Whenever SEAMUX_USER and SEAMUX_PASS are set, every request other than the
 // tunnel's must carry them, whatever it asks for.
@@ -169,23 +168,12 @@ export function updateRunFile(dir: string, fields: Record<string, unknown>) {
 export type RemoteSwitch = "remote" | "tunnel" | "mdns";
 
 // `remote` is the master switch. Before there was mDNS it was the tunnel's
-// own switch, so a file without `tunnel` takes it from `remote`. mDNS and the
-// tunnel are never on together; a file from before that rule with both on
-// gets the tunnel.
+// own switch, so a file without `tunnel` takes it from `remote`.
 function readSwitches(dir: string): Record<RemoteSwitch, boolean> {
   const saved = readRunFile(dir);
   const remote = saved.remote === true;
   const tunnel = typeof saved.tunnel === "boolean" ? saved.tunnel : remote;
-  return { remote, tunnel, mdns: saved.mdns === true && !tunnel };
-}
-
-export type RemoteMode = "local" | "mdns" | "tunnel";
-
-export function remoteMode(dir: string): RemoteMode {
-  const s = readSwitches(dir);
-  if (!s.remote) return "local";
-  if (s.tunnel) return "tunnel";
-  return s.mdns ? "mdns" : "local";
+  return { remote, tunnel, mdns: saved.mdns === true };
 }
 
 export function remoteEnabled(dir: string): boolean {
@@ -194,21 +182,19 @@ export function remoteEnabled(dir: string): boolean {
 
 // Whether cloudflared should run.
 export function tunnelWanted(dir: string): boolean {
-  return remoteMode(dir) === "tunnel";
+  const s = readSwitches(dir);
+  return s.remote && s.tunnel;
 }
 
 // Whether the board should listen on the network.
 export function lanWanted(dir: string): boolean {
-  return remoteMode(dir) === "mdns";
+  const s = readSwitches(dir);
+  return s.remote && s.mdns;
 }
 
 // Writes every switch, so the tunnel's no longer follows the master's.
-// Turning mDNS or the tunnel on turns the other off.
 export function setRemoteSwitch(dir: string, which: RemoteSwitch, on: boolean) {
-  const switches = { ...readSwitches(dir), [which]: on };
-  if (on && which === "mdns") switches.tunnel = false;
-  if (on && which === "tunnel") switches.mdns = false;
-  updateRunFile(dir, switches);
+  updateRunFile(dir, { ...readSwitches(dir), [which]: on });
 }
 
 function runPort(dir: string): number {
@@ -282,28 +268,34 @@ export function checkRequest(
   host: string | null,
   authorization: string | null,
 ): GateVerdict {
-  const mode = remoteMode(dir);
+  const lan = lanWanted(dir);
   const loopback = isLoopback(peer);
   const name = host === null ? null : hostOf(host);
-  const domain = mode === "tunnel" ? remoteDomain(dir) : null;
-  if (!loopback && mode !== "mdns") {
+  const domain = tunnelWanted(dir) ? remoteDomain(dir) : null;
+  if (!loopback && !lan) {
     return {
       verdict: "denied",
       reason: "it came from the network, and mDNS is off in the Remote tab",
     };
   }
   if (domain !== null && name === domain) {
-    // cloudflared connects from this Mac; the network can't get here, since
-    // the board binds 127.0.0.1 in tunnel mode.
+    // cloudflared connects from this Mac. With mDNS on the network can reach
+    // the board too, and must not pass as cloudflared by naming the tunnel.
+    if (!loopback) {
+      return {
+        verdict: "denied",
+        reason: `it came from the network addressed to ${domain}, which only the tunnel answers`,
+      };
+    }
     return { verdict: "tunnel" };
   }
   const answered =
-    (loopback && isLocalName(host)) || (mode === "mdns" && name === lanHost());
+    (loopback && isLocalName(host)) || (lan && name === lanHost());
   if (!answered) {
     const names = [
       ...(loopback ? LOCAL_NAMES : []),
-      ...(mode === "mdns" ? [lanHost()] : []),
-      ...(domain !== null ? [domain] : []),
+      ...(lan ? [lanHost()] : []),
+      ...(domain !== null && loopback ? [domain] : []),
     ];
     return {
       verdict: "denied",
@@ -312,7 +304,7 @@ export function checkRequest(
   }
   const credentials = readCredentials(dir);
   if (!credentials) {
-    if (mode !== "mdns" || name !== lanHost()) return { verdict: "allowed" };
+    if (!lan || name !== lanHost()) return { verdict: "allowed" };
     return {
       verdict: "denied",
       reason:
@@ -373,7 +365,7 @@ export function remoteStatus(dir: string, host: string | null): RemoteStatus {
 
 // --- Requests through the tunnel -----------------------------------------
 
-// The tunnel's hostname, while the board is in tunnel mode.
+// The tunnel's hostname, while the tunnel is on.
 export function isTunnelHost(dir: string, host: string | null): boolean {
   const domain = tunnelWanted(dir) ? remoteDomain(dir) : null;
   return domain !== null && host !== null && hostOf(host) === domain;
