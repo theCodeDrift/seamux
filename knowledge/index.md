@@ -20,6 +20,7 @@ Read the domain before you touch the code that leans on it. When a tool surprise
 | [Slash commands](slash-commands.md) | Listing a chat's slash commands, and why the slash menu isn't the way |
 | [Names](names.md) | Renaming chats and workspaces, in Claude Code, Codex and cmux |
 | [Codex](codex.md) | Everything Codex does differently, from its transcripts to its approvals |
+| [OpenCode](opencode.md) | Measured before its engine: how cmux registers it, its SQLite sessions, its lifecycle, approvals and keys |
 | [Signing in](signing-in.md) | Detecting an expired login and signing Claude Code or Codex in without a terminal |
 | [Cloudflare Tunnel](cloudflare-tunnel.md) | cloudflared, its hostname, and Cloudflare Access |
 | [mDNS](mdns.md) | Reaching the board by this Mac's `.local` name |
