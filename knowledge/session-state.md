@@ -8,7 +8,7 @@ Claude Code also sets `busy` while internal helper agents run between turns, and
 
 - **Measured:** not recorded.
 - **In seamux:** `turnActive` and `turnRunning` in [board.server.ts](../app/lib/board.server.ts).
-- **See also:** [Helper agents fire `SubagentStop` with an empty `agent_type`](subagents.md#helper-agents-fire-subagentstop-with-an-empty-agent_type-and-never-fire-subagentstart), [A `!` command moves to the background after 120 seconds](transcripts.md#a--command-moves-to-the-background-after-120-seconds-and-its-output-leaves-the-transcript).
+- **See also:** [Helper agents fire `SubagentStop` with an empty `agent_type`](subagents.md#helper-agents-fire-subagentstop-with-an-empty-agent_type-and-never-fire-subagentstart), [A `!` command moves to the background after 120 seconds](transcripts.md#a--command-moves-to-the-background-after-120-seconds-and-its-output-leaves-the-transcript), [OpenCode's server says whether a session is busy](opencode.md#opencodes-server-says-whether-a-session-is-busy), whose `busy` covers a waiting permission prompt too.
 
 ## Idle and waiting are separate `status` values
 

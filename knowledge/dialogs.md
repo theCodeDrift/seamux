@@ -41,3 +41,11 @@ When its options carry a `preview`, Claude Code shows the one under the cursor b
 
 - **Measured:** Claude Code 2.1.282.
 - **In seamux:** `answerQuestion` in [macros.server.ts](../app/lib/macros.server.ts), and the board's side in [waiting-panel.tsx](../app/components/waiting-panel.tsx).
+
+## Two Escs on an idle Claude Code chat open Rewind
+
+With a turn already over, two Escs in a row opened "Rewind": "Restore the code and/or conversation to the point before…", listing the chat's prompts with "(current)" selected, and "Enter to continue · Esc to cancel" below. One more Esc closed it. Two Escs during a turn, before any reply showed, stopped it and put the prompt back in the box, as one Esc does, with no Rewind. So a Stop of two Escs that lands as a turn ends leaves Rewind open, and the chat waiting on a dialog nobody asked for.
+
+- **Measured:** Claude Code 2.1.287, cmux 0.64.25.
+- **In seamux:** `interrupt` in [macros.server.ts](../app/lib/macros.server.ts) presses one Esc.
+- **See also:** [Esc twice interrupts a turn](opencode.md#esc-twice-interrupts-a-turn) in OpenCode, where one Esc doesn't.

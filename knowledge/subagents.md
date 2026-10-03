@@ -23,4 +23,4 @@ Each session's transcript directory holds `subagents/agent-<id>.jsonl` and `agen
 
 - **Measured:** not recorded.
 - **In seamux:** `toSubagent` in [board.server.ts](../app/lib/board.server.ts).
-- **See also:** [Transcripts](transcripts.md).
+- **See also:** [Transcripts](transcripts.md), [An OpenCode subagent is a child session](opencode.md#an-opencode-subagent-is-a-child-session), and [cmux lists it as a session of its own](opencode.md#cmux-lists-an-opencode-subagent-as-a-session-of-its-own).
