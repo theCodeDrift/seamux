@@ -66,3 +66,4 @@ A live Claude Code session in a cmux surface can come back with `pid: null`, `st
 
 - **Measured:** cmux 0.64.23, Claude Code 2.1.286, on one dispatched session; what drops the pid is unknown.
 - **In seamux:** `listLive` and `runningClaudeSessions` in [drive.server.ts](../app/lib/drive.server.ts); the fake's `stored_pid_exists: null` in [tests/fake-cmux.ts](../tests/fake-cmux.ts), and the contract in [tests-cmux/contract.test.ts](../tests-cmux/contract.test.ts).
+- **See also:** [`active_for_surface` stays `false` for a live OpenCode session](opencode.md#active_for_surface-stays-false-for-a-live-opencode-session), where `stored_pid_exists` was never `null` and there is no `claude agents` to ask.

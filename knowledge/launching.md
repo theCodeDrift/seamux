@@ -16,7 +16,7 @@ So neither `claude` nor `node` is on its `PATH`, and nor is anything else `~/.zs
 
 - **Measured:** cmux 0.64.23.
 - **In seamux:** `launch` in [drive.server.ts](../app/lib/drive.server.ts), `BIN_DIRS` in [bins.server.ts](../app/lib/bins.server.ts), and each harness's `wrapper` in [harness.server.ts](../app/lib/harness.server.ts).
-- **See also:** [Codex is not on the launch shell's `PATH` either](codex.md#codex-is-not-on-the-launch-shells-path-either), [cmux's wrapper passes `claude` subcommands straight through](background-sessions.md#cmuxs-wrapper-passes-claude-subcommands-straight-through).
+- **See also:** [Codex is not on the launch shell's `PATH` either](codex.md#codex-is-not-on-the-launch-shells-path-either), [cmux's wrapper passes `claude` subcommands straight through](background-sessions.md#cmuxs-wrapper-passes-claude-subcommands-straight-through), [cmux registers an OpenCode session launched without a wrapper](opencode.md#cmux-registers-an-opencode-session-launched-without-a-wrapper), through its plugin.
 
 ## A new folder stops on a trust dialog that nothing reports
 
@@ -24,6 +24,6 @@ Before Claude Code starts, it asks whether the folder is trusted: no `claude age
 
 - **Measured:** not recorded.
 - **In seamux:** `acceptTrust` in [macros.server.ts](../app/lib/macros.server.ts), started from `launch` in [drive.server.ts](../app/lib/drive.server.ts).
-- **See also:** [Codex's trust dialog defaults to yes](codex.md#the-trust-dialog-defaults-to-yes), [Dialogs](dialogs.md).
+- **See also:** [Codex's trust dialog defaults to yes](codex.md#the-trust-dialog-defaults-to-yes), [Dialogs](dialogs.md), [OpenCode asks nothing in a new folder](opencode.md#a-new-folder-asks-nothing).
 
 Resuming has a launch finding of its own: [A resumed chat is invisible for a few seconds](session-state.md#a-resumed-chat-is-invisible-for-a-few-seconds).

@@ -41,7 +41,7 @@ Before that there is no record in `~/.cmuxterm/codex-hook-sessions.json`. A resu
 
 - **Measured:** Codex 0.156.1, cmux 0.64.23.
 - **In seamux:** [drive.server.ts](../app/lib/drive.server.ts) remembers where it resumed a Codex session until cmux catches up.
-- **See also:** [A resumed chat is invisible for a few seconds](session-state.md#a-resumed-chat-is-invisible-for-a-few-seconds).
+- **See also:** [A resumed chat is invisible for a few seconds](session-state.md#a-resumed-chat-is-invisible-for-a-few-seconds), [cmux knows an OpenCode session only after its first prompt](opencode.md#cmux-knows-an-opencode-session-only-after-its-first-prompt), where a resumed session also moves on its next prompt.
 
 ## `active_for_surface` stays `false` for a live Codex session
 
@@ -49,6 +49,7 @@ Before that there is no record in `~/.cmuxterm/codex-hook-sessions.json`. A resu
 
 - **Measured:** Codex 0.156.1, cmux 0.64.23.
 - **In seamux:** `listLive` in [drive.server.ts](../app/lib/drive.server.ts).
+- **See also:** [`active_for_surface` stays `false` for a live OpenCode session](opencode.md#active_for_surface-stays-false-for-a-live-opencode-session).
 
 ## cmux's lifecycle is unreliable for Codex
 
@@ -56,7 +57,7 @@ It goes `running` on a prompt and `idle` when a turn completes, but stays `runni
 
 - **Measured:** Codex 0.156.1, cmux 0.64.23.
 - **In seamux:** `summarizeCodex` in [codex.server.ts](../app/lib/codex.server.ts).
-- **See also:** [`status: busy` does not mean a turn is running](session-state.md#status-busy-does-not-mean-a-turn-is-running), Claude Code's version of the same lesson.
+- **See also:** [`status: busy` does not mean a turn is running](session-state.md#status-busy-does-not-mean-a-turn-is-running), Claude Code's version of the same lesson, and [cmux's lifecycle is unreliable for OpenCode](opencode.md#cmuxs-lifecycle-is-unreliable-for-opencode), OpenCode's.
 
 ## The record names the transcript
 
@@ -64,7 +65,7 @@ It goes `running` on a prompt and `idle` when a turn completes, but stays `runni
 
 - **Measured:** Codex 0.156.1, cmux 0.64.23.
 - **In seamux:** `indexCodexTranscripts`, `summarizeCodex` and `loadCodexMessages` in [codex.server.ts](../app/lib/codex.server.ts).
-- **See also:** [Transcripts do not record the context window](transcripts.md#transcripts-do-not-record-the-context-window), which Codex's do.
+- **See also:** [Transcripts do not record the context window](transcripts.md#transcripts-do-not-record-the-context-window), which Codex's do, and [cmux has no transcript for OpenCode](opencode.md#cmux-has-no-transcript-for-opencode-whose-sessions-live-in-sqlite), whose record names none.
 
 ## An open approval is a tool call with no output
 
@@ -72,7 +73,7 @@ The screen shows "Would you like to run the following command?" with "1. Yes, pr
 
 - **Measured:** Codex 0.156.1, cmux 0.64.23.
 - **In seamux:** `parseCodexApproval` in [codex.server.ts](../app/lib/codex.server.ts), `readCodexApproval` in [drive.server.ts](../app/lib/drive.server.ts), and Codex's `approveKey` in [harness.server.ts](../app/lib/harness.server.ts).
-- **See also:** [A permission prompt's "No" has no fixed number](dialogs.md#a-permission-prompts-no-has-no-fixed-number).
+- **See also:** [A permission prompt's "No" has no fixed number](dialogs.md#a-permission-prompts-no-has-no-fixed-number), [A waiting permission prompt looks like a running tool call](opencode.md#a-waiting-permission-prompt-looks-like-a-running-tool-call) in OpenCode.
 
 ## Esc interrupts, `/quit` exits, and `codex resume <id>` resumes
 
@@ -80,6 +81,7 @@ The interrupt is logged as `turn_aborted` with `reason: interrupted`. `codex que
 
 - **Measured:** Codex 0.156.1, cmux 0.64.23.
 - **In seamux:** Codex's `resumeArgs` in [harness.server.ts](../app/lib/harness.server.ts).
+- **See also:** [Esc twice interrupts a turn](opencode.md#esc-twice-interrupts-a-turn) in OpenCode, [`/exit` ends OpenCode and leaves cmux's record](opencode.md#exit-ends-opencode-and-leaves-cmuxs-record), [`opencode -s <id>` resumes on the old surface until the next prompt](opencode.md#opencode--s-id-resumes-on-the-old-surface-until-the-next-prompt).
 
 ## `/exit` exits too, and the workspace closes a moment after cmux reports the session over
 
