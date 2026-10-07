@@ -75,6 +75,42 @@ const state = ((globalThis as any).__seamuxServices ??= {
   signedInAt: Map<Engine, number>;
 };
 
+// How each service signs in, as measured in the comment at the top.
+interface SignIn {
+  // Whether it is signed in, or null when it couldn't be told.
+  status: () => Promise<boolean | null>;
+  // The command that signs in.
+  login: [string, string[]];
+  // It hands BROWSER a URL that finishes on this Mac, and the stand-in
+  // browser keeps it for the board.
+  localUrl: boolean;
+  // Its sign-in page shows a code to paste back on stdin.
+  takesCode: boolean;
+  // The one-time code it prints to enter on its page.
+  deviceCode: RegExp | null;
+  // Its chats' transcripts record a request refused for an expired login.
+  recordsExpiry: boolean;
+}
+
+const SIGN_IN: Record<Engine, SignIn> = {
+  claude: {
+    status: askClaude,
+    login: ["claude", ["auth", "login"]],
+    localUrl: true,
+    takesCode: true,
+    deviceCode: null,
+    recordsExpiry: true,
+  },
+  codex: {
+    status: askCodex,
+    login: ["codex", ["login", "--device-auth"]],
+    localUrl: false,
+    takesCode: false,
+    deviceCode: /\b[A-Z0-9]{4}-[A-Z0-9]{4,6}\b/,
+    recordsExpiry: false,
+  },
+};
+
 // `claude auth status` exits 1 when signed out, with the same JSON.
 async function askClaude(): Promise<boolean | null> {
   const parse = (stdout: string) => JSON.parse(stdout).loggedIn === true;
@@ -106,7 +142,7 @@ async function askCodex(): Promise<boolean | null> {
 async function signedIn(service: Engine, now: number): Promise<boolean | null> {
   const held = state.status.get(service);
   if (held && now - held.at < STATUS_TTL_MS) return held.signedIn;
-  const answer = await (service === "claude" ? askClaude() : askCodex());
+  const answer = await SIGN_IN[service].status();
   state.status.set(service, { at: now, signedIn: answer });
   return answer;
 }
@@ -132,12 +168,9 @@ function viewOf(service: Engine, login: Login): ServiceLogin {
   return {
     state: login.ok == null ? "running" : login.ok ? "done" : "failed",
     url: urlIn(login.output),
-    deviceCode:
-      service === "codex"
-        ? (/\b[A-Z0-9]{4}-[A-Z0-9]{4,6}\b/.exec(output)?.[0] ?? null)
-        : null,
+    deviceCode: SIGN_IN[service].deviceCode?.exec(output)?.[0] ?? null,
     localUrl: login.urlFile ? readUrl(login.urlFile) : null,
-    takesCode: service === "claude",
+    takesCode: SIGN_IN[service].takesCode,
     message: login.message,
     startedAt: login.startedAt,
   };
@@ -170,18 +203,17 @@ function lastLine(output: string): string | null {
 export function startLogin(service: Engine) {
   const current = state.logins.get(service);
   if (current && current.ok == null) return;
-  const [cmd, args] =
-    service === "claude"
-      ? ["claude", ["auth", "login"]]
-      : ["codex", ["login", "--device-auth"]];
-  const dir =
-    service === "claude" ? mkdtempSync(join(tmpdir(), "seamux-login-")) : null;
+  const signIn = SIGN_IN[service];
+  const [cmd, args] = signIn.login;
+  const dir = signIn.localUrl
+    ? mkdtempSync(join(tmpdir(), "seamux-login-"))
+    : null;
   const urlFile = dir ? join(dir, "url") : null;
   const child = spawn(cmd, args, {
     env: urlFile
       ? { ...env(), BROWSER: LOGIN_BROWSER, SEAMUX_LOGIN_URL_FILE: urlFile }
       : env(),
-    stdio: [service === "claude" ? "pipe" : "ignore", "pipe", "pipe"],
+    stdio: [signIn.takesCode ? "pipe" : "ignore", "pipe", "pipe"],
   });
   const login: Login = {
     child,
@@ -253,18 +285,22 @@ export async function sendOrSignIn(
   return false;
 }
 
-const live = (c: Card) => c.column !== "done" && c.engine === "claude";
 const named = (c: Card) => ({ sessionId: c.sessionId, name: c.name });
 
-// Live chats whose last turn ended on an expired login.
-function stoppedOnLogin(cards: Card[]): Card[] {
+// The service's live chats whose last turn ended on an expired login.
+function stoppedOnLogin(cards: Card[], service: Engine): Card[] {
+  if (!SIGN_IN[service].recordsExpiry) return [];
   return cards.filter(
-    (c) => live(c) && c.apiError?.kind === "authentication_failed",
+    (c) =>
+      c.column !== "done" &&
+      c.engine === service &&
+      c.apiError?.kind === "authentication_failed",
   );
 }
 
-// Each installed service with something to show. Codex writes no errors
-// the board reads, so only its own status speaks for it.
+// Each installed service with something to show. One whose transcripts
+// record no expired login, such as Codex, has only its own status to speak
+// for it.
 export async function serviceNotices(
   cards: Card[],
   now: number,
@@ -275,7 +311,7 @@ export async function serviceNotices(
   );
   const notices = await Promise.all(
     services.map(async (service): Promise<ServiceNotice> => {
-      const stopped = service === "claude" ? stoppedOnLogin(cards) : [];
+      const stopped = stoppedOnLogin(cards, service);
       const since = state.signedInAt.get(service) ?? 0;
       const status = await signedIn(service, now);
       return {
@@ -288,16 +324,17 @@ export async function serviceNotices(
       };
     }),
   );
-  return notices.filter(
-    (n) => n.needsLogin || n.stopped.length > 0 || n.login,
-  );
+  return notices.filter((n) => n.needsLogin || n.stopped.length > 0 || n.login);
 }
 
 // Sends each chat stopped on an expired login on its way again. Returns the
 // ones that could not be reached.
-export async function resumeStopped(cards: Card[]): Promise<string[]> {
+export async function resumeStopped(
+  cards: Card[],
+  service: Engine,
+): Promise<string[]> {
   const failed: string[] = [];
-  for (const card of stoppedOnLogin(cards)) {
+  for (const card of stoppedOnLogin(cards, service)) {
     if (!card.drivable) {
       failed.push(card.name);
       continue;

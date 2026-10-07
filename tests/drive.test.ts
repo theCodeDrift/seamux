@@ -9,20 +9,24 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ENGINE_FEATURES, ENGINES } from "~/lib/config";
 import {
   answerApproval,
   answerDialog,
   answerQuestion,
   closeChat,
   dispatch,
+  fork,
   interrupt,
   listLive,
   readDialog,
   renameLive,
+  resume,
   resumeTurn,
   sendMessage,
   UnsentError,
 } from "~/lib/drive.server";
+import { HARNESSES } from "~/lib/harness.server";
 import { FakeCmux, type FakeSurface } from "./fake-cmux";
 
 let cmux: FakeCmux;
@@ -614,5 +618,80 @@ describe("dispatch", () => {
       "Say what the new session should do",
     );
     expect(cmux.calls("workspace.create")).toEqual([]);
+  });
+
+  // Codex takes no session id: it picks its own, which cmux files under the
+  // new surface once the first prompt goes in.
+  it("waits for cmux to file a session that picks its own id", async () => {
+    const started = dispatch({
+      cwd: dir(),
+      engine: "codex",
+      prompt: "Fix the login page",
+    });
+    await vi.waitFor(() =>
+      expect(cmux.calls("workspace.create")).toHaveLength(1),
+    );
+    const command = String(
+      cmux.calls("workspace.create")[0].params.initial_command,
+    );
+    expect(command).toContain("cmux-codex-wrapper");
+    expect(command).not.toContain("--session-id");
+    const created = cmux.workspaces.at(-1)!;
+    cmux.sessions.push({
+      session_id: "codex-picked",
+      agent: "codex",
+      active_for_surface: false,
+      stored_pid_exists: true,
+      surface_id: created.surfaces[0].id,
+      workspace_id: created.id,
+    });
+    cmux.writeSessions();
+    expect(await started).toBe("codex-picked");
+  });
+});
+
+describe("fork", () => {
+  it("is offered on the board for exactly the harnesses that can", () => {
+    for (const engine of ENGINES) {
+      expect(ENGINE_FEATURES[engine].fork, engine).toBe(
+        HARNESSES[engine].fork !== undefined,
+      );
+    }
+  });
+
+  it("starts Claude Code on a copy of the parent's conversation", async () => {
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), "seamux-fork-")));
+    const sessionId = await fork(
+      "parent-id",
+      cwd,
+      "Try it another way",
+      "claude",
+    );
+    const command = String(
+      cmux.calls("workspace.create")[0].params.initial_command,
+    );
+    expect(command).toContain("--resume");
+    expect(command).toContain("parent-id");
+    expect(command).toContain("--fork-session");
+    expect(command).toContain(sessionId);
+  });
+
+  it("refuses a harness that can't fork, before reaching cmux", async () => {
+    await expect(
+      fork("parent-id", "/tmp", "Try it another way", "codex"),
+    ).rejects.toThrow("Codex chats can't be forked");
+    expect(cmux.calls("workspace.create")).toEqual([]);
+  });
+});
+
+describe("resume", () => {
+  // A resumed Codex session stays filed under its old surface until its
+  // next prompt, so seamux counts it live in the new one until then.
+  it("keeps a resumed session cmux hasn't refiled live in its new surface", async () => {
+    await resume("codex-old", "/tmp", "old chat", "codex");
+    const created = cmux.workspaces.at(-1)!;
+    const live = (await listLive()).get("codex-old");
+    expect(live).toMatchObject({ engine: "codex" });
+    expect(live!.surface.surfaceId).toBe(created.surfaces[0].id);
   });
 });

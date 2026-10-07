@@ -34,7 +34,7 @@ async function perform(service: Engine, intent: string, form: FormData) {
   } else if (intent === "login-cancel") {
     cancelLogin(service);
   } else if (intent === "resume") {
-    const failed = await resumeStopped((await loadBoard()).cards);
+    const failed = await resumeStopped((await loadBoard()).cards, service);
     if (failed.length > 0) {
       throw new Error(`Couldn't reach ${failed.join(", ")}`);
     }

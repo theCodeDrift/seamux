@@ -1,0 +1,46 @@
+id: avoid-engine-branching
+language: TypeScript
+severity: error
+message: Look up what an agent does on its Harness, not by comparing its name.
+note: |
+  A new harness supplies a `Harness` entry rather than branching on
+  `engine` (CLAUDE.md, Layout), so a branch it would need can't be missed
+  and fall through to another agent's behaviour. Put what differs on
+  `HARNESSES` in app/lib/harness.server.ts, on `ENGINE_FEATURES` in
+  app/lib/config.ts for what the browser needs too, or in a
+  `Record<Engine, …>` beside the code that reads it, and look it up:
+  `HARNESSES[engine].identify`, `ENGINE_FEATURES[card.engine].fork`.
+  Comparing two engines, `live.engine === engine`, is fine.
+files:
+  - "app/**/*.ts"
+ignores:
+  - app/lib/harness.server.ts
+# An engine, a service or cmux's agent name: `engine`, `card.engine`.
+utils:
+  engine-name:
+    any:
+      - kind: identifier
+        regex: ^(engine|service|agent)$
+      - kind: member_expression
+        regex: \.(engine|service|agent)$
+rule:
+  any:
+    - kind: binary_expression
+      all:
+        - any:
+            - pattern: $A === $B
+            - pattern: $A !== $B
+            - pattern: $A == $B
+            - pattern: $A != $B
+        - any:
+            - all:
+                - has: { field: left, matches: engine-name }
+                - has: { field: right, kind: string }
+            - all:
+                - has: { field: right, matches: engine-name }
+                - has: { field: left, kind: string }
+    - kind: switch_statement
+      has:
+        field: value
+        kind: parenthesized_expression
+        has: { matches: engine-name }

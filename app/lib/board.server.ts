@@ -39,7 +39,7 @@ import {
   type CodexSummary,
   type CodexTranscript,
 } from "./codex.server";
-import type { Engine } from "./config";
+import { ENGINES, type Engine } from "./config";
 import {
   closingState,
   listLive,
@@ -473,37 +473,67 @@ export async function sessionInfo(
   return found ? infoFrom(sessionId, found) : null;
 }
 
-// Claude Code's transcripts, then Codex's.
+// How each harness's transcripts are found and read.
+interface TranscriptReader {
+  // sessionId -> its transcript, across every project.
+  index: () => Promise<Map<string, Transcript>>;
+  // Where the chat ran and what it is called, null without a directory.
+  info: (
+    sessionId: string,
+    path: string,
+  ) => Promise<{ cwd: string; name: string | null } | null>;
+  // The visible conversation, oldest first.
+  messages: (path: string) => Promise<ChatMessage[]>;
+}
+
+const READERS: Record<Engine, TranscriptReader> = {
+  claude: {
+    index: indexTranscripts,
+    info: async (_id, path) => {
+      const s = await summarize(path);
+      return s.cwd ? { cwd: s.cwd, name: s.name } : null;
+    },
+    messages: loadClaudeMessages,
+  },
+  // Codex keeps names apart from transcripts, in its session index.
+  codex: {
+    index: indexCodexTranscripts,
+    info: async (id, path) => {
+      const [s, names] = await Promise.all([
+        summarizeCodex(path),
+        codexNames(),
+      ]);
+      return s.cwd ? { cwd: s.cwd, name: names.get(id) ?? null } : null;
+    },
+    messages: loadCodexMessages,
+  },
+};
+
+// Each harness's transcripts in turn, in the order ENGINES lists them.
 async function findTranscript(
   sessionId: string,
 ): Promise<(Transcript & { engine: Engine }) | null> {
-  const claude = (await indexTranscripts()).get(sessionId);
-  if (claude) return { ...claude, engine: "claude" };
-  const codex = (await indexCodexTranscripts()).get(sessionId);
-  return codex ? { ...codex, engine: "codex" } : null;
+  for (const engine of ENGINES) {
+    const found = (await READERS[engine].index()).get(sessionId);
+    if (found) return { ...found, engine };
+  }
+  return null;
 }
 
 async function infoFrom(
   sessionId: string,
   transcript: Transcript & { engine: Engine },
 ) {
-  const fallback = sessionId.slice(0, 8);
-  if (transcript.engine === "codex") {
-    const [s, names] = await Promise.all([
-      summarizeCodex(transcript.path),
-      codexNames(),
-    ]);
-    return s.cwd
-      ? {
-          cwd: s.cwd,
-          name: names.get(sessionId) ?? fallback,
-          engine: "codex" as const,
-        }
-      : null;
-  }
-  const s = await summarize(transcript.path);
-  return s.cwd
-    ? { cwd: s.cwd, name: s.name ?? fallback, engine: "claude" as const }
+  const info = await READERS[transcript.engine].info(
+    sessionId,
+    transcript.path,
+  );
+  return info
+    ? {
+        cwd: info.cwd,
+        name: info.name ?? sessionId.slice(0, 8),
+        engine: transcript.engine,
+      }
     : null;
 }
 
@@ -513,11 +543,14 @@ export async function loadMessages(
 ): Promise<ChatMessage[] | null> {
   const transcript = await findTranscript(sessionId);
   if (!transcript) return null;
-  if (transcript.engine === "codex")
-    return (await loadCodexMessages(transcript.path)).slice(-limit);
+  return (await READERS[transcript.engine].messages(transcript.path)).slice(
+    -limit,
+  );
+}
 
+async function loadClaudeMessages(path: string): Promise<ChatMessage[]> {
   const messages: ChatMessage[] = [];
-  for (const line of await readTail(transcript.path)) {
+  for (const line of await readTail(path)) {
     if (!line) continue;
     let o: any;
     try {
@@ -551,7 +584,7 @@ export async function loadMessages(
       at: o.timestamp ?? null,
     });
   }
-  return messages.slice(-limit);
+  return messages;
 }
 
 function tagged(text: string, tag: string): string | null {
@@ -801,11 +834,9 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
   let trouble = cmux as CmuxTrouble | null;
   if (trouble === "not_running" && (await cmuxAppRunning().catch(() => false)))
     trouble = "socket_off";
-  const surfaces = new Map(
-    [...live]
-      .filter(([, l]) => l.engine === "claude")
-      .map(([id, l]) => [id, l.surface]),
-  );
+  // Read for the chats `claude agents` lists, whose ids no other harness's
+  // session shares.
+  const surfaces = new Map([...live].map(([id, l]) => [id, l.surface]));
 
   // A background session attached to a terminal is a chat the user is in, so
   // it gets a card like any interactive session. Once the terminal closes it
@@ -918,9 +949,14 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
     }),
   );
 
-  const codexLive = [...live].filter(([, l]) => l.engine === "codex");
-  const codexCards = await Promise.all(
-    codexLive.map(([sessionId, l]) =>
+  // Where each harness's live chats come from: Claude Code's from `claude
+  // agents`, above, and the others' from cmux, one card per live session.
+  const fromCmux: Record<
+    Engine,
+    ((sessionId: string, l: LiveSession) => Promise<Card>) | null
+  > = {
+    claude: null,
+    codex: (sessionId, l) =>
       codexCard(
         sessionId,
         l,
@@ -928,9 +964,14 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
         names,
         workspaces,
       ),
-    ),
+  };
+  const cmuxCards = await Promise.all(
+    [...live].flatMap(([sessionId, l]) => {
+      const card = fromCmux[l.engine];
+      return card ? [card(sessionId, l)] : [];
+    }),
   );
-  liveCards.push(...codexCards);
+  liveCards.push(...cmuxCards);
 
   // A chat is closed once it is no longer live and is not a background job.
   // A chat moved to the background keeps its first transcript under the

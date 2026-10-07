@@ -105,6 +105,25 @@ export const ENGINE_COLORS: Record<Engine, string> = {
   codex: "var(--engine-codex)",
 };
 
+// What each agent can do that the board offers, readable in the browser as
+// well as on the server. What only the server needs is on its Harness
+// (harness.server.ts). A new agent fills in every field, so nothing it
+// lacks falls through to another agent's behaviour.
+export interface EngineFeatures {
+  // Its slash commands are listed (commands.server.ts) and suggested as
+  // they're typed.
+  slashCommands: boolean;
+  // It starts a new chat from a copy of another's conversation.
+  fork: boolean;
+  // A card names it, which every agent but the one most chats run gets.
+  badge: boolean;
+}
+
+export const ENGINE_FEATURES: Record<Engine, EngineFeatures> = {
+  claude: { slashCommands: true, fork: true, badge: false },
+  codex: { slashCommands: false, fork: false, badge: true },
+};
+
 export function isEngine(name: string): name is Engine {
   return (ENGINES as readonly string[]).includes(name);
 }

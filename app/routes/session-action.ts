@@ -223,9 +223,12 @@ async function perform(
   } else if (intent === "fork") {
     const info = await sessionInfo(sessionId);
     if (!info) throw new Error("No transcript to fork from");
-    if (info.engine !== "claude")
-      throw new Error("Only Claude Code chats can be forked");
-    return fork(sessionId, info.cwd, String(form.get("text") ?? ""));
+    return fork(
+      sessionId,
+      info.cwd,
+      String(form.get("text") ?? ""),
+      info.engine,
+    );
   } else if (intent === "pin" || intent === "unpin") {
     setPinned(sessionId, intent === "pin");
   } else if (intent === "rename") {
@@ -269,7 +272,11 @@ export async function action({
 
   try {
     const created = await perform(params.sessionId, intent, form);
-    return { ok: true, error: null, ...(created ? { sessionId: created } : {}) };
+    return {
+      ok: true,
+      error: null,
+      ...(created ? { sessionId: created } : {}),
+    };
   } catch (err) {
     return { ok: false, error: (err as Error).message };
   }

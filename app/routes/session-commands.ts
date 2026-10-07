@@ -3,10 +3,11 @@ import { data } from "react-router";
 import type { Route } from "./+types/session-commands";
 import { sessionInfo } from "~/lib/board.server";
 import { slashCommands } from "~/lib/commands.server";
+import { ENGINE_FEATURES } from "~/lib/config";
 import { listLive } from "~/lib/drive.server";
 import { SESSION_ID } from "~/lib/guard.server";
 
-// The slash commands a chat's inputs suggest. Only Claude Code lists them.
+// The slash commands a chat's inputs suggest, for an agent that lists them.
 export async function loader({ params }: Route.LoaderArgs) {
   if (!SESSION_ID.test(params.sessionId)) {
     throw data("Bad session id", { status: 400 });
@@ -16,7 +17,8 @@ export async function loader({ params }: Route.LoaderArgs) {
   const info =
     (await sessionInfo(params.sessionId)) ??
     (await listLive().catch(() => null))?.get(params.sessionId);
-  if (info?.engine !== "claude" || !info.cwd) return { commands: [] };
+  if (!info?.cwd || !ENGINE_FEATURES[info.engine].slashCommands)
+    return { commands: [] };
   try {
     return { commands: await slashCommands(info.cwd) };
   } catch (err) {

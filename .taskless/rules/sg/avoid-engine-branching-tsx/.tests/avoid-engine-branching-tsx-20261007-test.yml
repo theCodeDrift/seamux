@@ -1,0 +1,28 @@
+id: avoid-engine-branching-tsx
+valid:
+  - |
+    if (!HARNESSES[engine].identify) await sessionIn(engine, surface);
+  - |
+    const slash = ENGINE_FEATURES[card.engine].slashCommands;
+  - |
+    if (live.engine === engine) return id;
+  - |
+    const fallback = input.engine ?? "claude";
+  - |
+    if (card.column === "done") return;
+invalid:
+  - |
+    if (engine === "codex") codexResumed.set(sessionId, surface);
+  - |
+    const enabled = card.drivable && card.engine === "claude";
+  - |
+    if (info?.engine !== "claude") return { commands: [] };
+  - |
+    const takesCode = service === "claude";
+  - |
+    if ("claude" === s.agent) continue;
+  - |
+    switch (card.engine) {
+      case "codex":
+        break;
+    }

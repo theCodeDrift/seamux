@@ -104,7 +104,7 @@ import {
   type Column,
 } from "~/lib/board";
 import { loadBoard } from "~/lib/board.server";
-import { ENGINE_LABELS, type Engine } from "~/lib/config";
+import { ENGINE_FEATURES, ENGINE_LABELS, type Engine } from "~/lib/config";
 import { configOrDefaults } from "~/lib/config.server";
 import { installedEngines } from "~/lib/drive.server";
 import { startQueue } from "~/lib/queue.server";
@@ -459,7 +459,11 @@ function ChatInput({
   const slash = useSlashMenu({
     sessionId: card.sessionId,
     // The modal has its own menu.
-    enabled: card.drivable && card.engine === "claude" && !multiline && !open,
+    enabled:
+      card.drivable &&
+      ENGINE_FEATURES[card.engine].slashCommands &&
+      !multiline &&
+      !open,
     draft,
     setDraft: onDraftChange,
     anchor: form,
@@ -579,7 +583,7 @@ function ChatInput({
         queueing={queueing}
         pending={pending}
         error={error ?? forker.error}
-        onFork={card.engine === "claude" ? fork : null}
+        onFork={ENGINE_FEATURES[card.engine].fork ? fork : null}
         forking={forker.pending}
         title={<SessionName card={card} inModal />}
       />
@@ -1065,7 +1069,7 @@ function SessionCard({ card, now }: { card: BoardCard; now: number }) {
                 </span>
               )}
               <span className="sensitive">{ago(card.lastActivityAt, now)}</span>
-              {card.engine !== "claude" && (
+              {ENGINE_FEATURES[card.engine].badge && (
                 <Badge variant="outline" className="h-4 px-1.5 text-[10px]">
                   {ENGINE_LABELS[card.engine]}
                 </Badge>

@@ -4,13 +4,18 @@
 // one reaches every verb that uses it. knowledge/prompt-box.md has the measurements
 // behind each.
 
+import { execFile } from "node:child_process";
+import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 import { CMUX_BIN } from "./bins.server.ts";
 import { cmuxRpc } from "./cmux.server.ts";
+import { renameCodexSession } from "./codex.server.ts";
 import type { Engine } from "./config.ts";
 
 const rpc = cmuxRpc;
+const run = promisify(execFile);
 
 export interface Surface {
   surfaceId: string;
@@ -43,6 +48,33 @@ export interface Harness {
   trust: { prompt: string; keys: string[] };
   ready: string;
   resumeArgs: (sessionId: string) => string[];
+  // What gives a new chat the session id seamux picked, and its name.
+  // Without it the harness picks its own id, which seamux learns once cmux
+  // files the session under its surface.
+  identify?: (sessionId: string, name: string) => string[];
+  // What starts a new chat from a copy of another's conversation, with the
+  // session id seamux picked and its name, where it can (ENGINE_FEATURES).
+  fork?: (parentId: string, sessionId: string, name: string) => string[];
+  // The name cmux gives it, in the `agent` field of `cmux sessions list`.
+  cmuxAgent: string;
+  // Whether cmux marks its session active for its surface. Then the mark
+  // says it is live; otherwise its process does.
+  markedActive: boolean;
+  // The session ids of its processes still running, for a session whose
+  // pid cmux lost, where the harness can list them itself.
+  running?: () => Promise<Set<string>>;
+  // cmux files its session under a surface only once a prompt goes in, so a
+  // resumed one stays under its old surface until then.
+  filedOnPrompt: boolean;
+  // Names a closed chat, as /rename names an open one.
+  renameClosed: (
+    sessionId: string,
+    transcript: string,
+    name: string,
+  ) => Promise<void>;
+  // A turn stopped on a failed request resumes once the API answers again
+  // (reconnect.server.ts), for a harness whose transcripts record it.
+  reconnects: boolean;
 }
 
 // Measured against Claude Code 2.1.281 to 2.1.286 and codex-cli 0.156.1.
@@ -64,6 +96,22 @@ export const HARNESSES: Record<Engine, Harness> = {
     trust: { prompt: "Yes, I trust this folder", keys: ["down", "enter"] },
     ready: "Claude Code v",
     resumeArgs: (id) => ["--resume", id],
+    identify: (id, name) => ["--session-id", id, "--name", name],
+    fork: (parent, id, name) => [
+      "--resume",
+      parent,
+      "--fork-session",
+      "--session-id",
+      id,
+      "--name",
+      name,
+    ],
+    cmuxAgent: "claude",
+    markedActive: true,
+    running: runningClaudeSessions,
+    filedOnPrompt: false,
+    renameClosed: renameClaudeTranscript,
+    reconnects: true,
   },
   // Codex is the other way round: it folds long typed input into
   // "[Pasted Content N chars]" but shows a paste in full, so it always gets
@@ -79,8 +127,70 @@ export const HARNESSES: Record<Engine, Harness> = {
     trust: { prompt: "Trust this folder?", keys: ["enter"] },
     ready: "OpenAI Codex",
     resumeArgs: (id) => ["resume", id],
+    // Codex has no --session-id or --name: it picks its id, and titles the
+    // session itself after the first turn.
+    cmuxAgent: "codex",
+    markedActive: false,
+    filedOnPrompt: true,
+    renameClosed: (id, _transcript, name) => renameCodexSession(id, name),
+    reconnects: false,
   },
 };
+
+// The harness cmux names `agent`, if seamux drives it.
+export function harnessOf(agent: string): Harness | null {
+  return Object.values(HARNESSES).find((h) => h.cmuxAgent === agent) ?? null;
+}
+
+// The session ids of every Claude Code process still running.
+async function runningClaudeSessions(): Promise<Set<string>> {
+  const agents = await run("claude", ["agents", "--json", "--all"], {
+    maxBuffer: 32 * 1024 * 1024,
+    timeout: 10_000,
+  }).then(
+    ({ stdout }) =>
+      JSON.parse(stdout) as {
+        pid?: number | null;
+        sessionId?: string | null;
+      }[],
+    () => [],
+  );
+  return new Set(
+    agents
+      .filter((a) => a.sessionId && a.pid && processAlive(a.pid))
+      .map((a) => a.sessionId!),
+  );
+}
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // EPERM: alive, but someone else's.
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+// A closed Claude Code chat's name lives in its transcript, as the lines
+// `/rename` writes; Claude Code reads the last of them when the chat is
+// resumed. Appending adds to the transcript and changes nothing already in
+// it.
+async function renameClaudeTranscript(
+  sessionId: string,
+  transcript: string,
+  name: string,
+) {
+  await appendFile(
+    transcript,
+    [
+      { type: "custom-title", customTitle: name, sessionId },
+      { type: "agent-name", agentName: name, sessionId },
+    ]
+      .map((line) => JSON.stringify(line) + "\n")
+      .join(""),
+  );
+}
 
 // A tab counts as needing a paste: typed, one would autocomplete.
 export const MUST_PASTE = /[\r\n\t]/;

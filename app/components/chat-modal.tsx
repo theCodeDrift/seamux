@@ -33,6 +33,7 @@ import {
   type Attachment,
 } from "~/lib/attachments";
 import type { Card, ChatMessage, QueuedMessage } from "~/lib/board";
+import { ENGINE_FEATURES } from "~/lib/config";
 import { scrollKey } from "~/lib/sweep";
 import { useCoarsePointer } from "~/lib/use-pointer";
 import { useSessionAction } from "~/lib/use-session-action";
@@ -152,7 +153,8 @@ export function ChatModal({
   const picker = useRef<HTMLInputElement>(null);
   const slash = useSlashMenu({
     sessionId: card.sessionId,
-    enabled: open && card.drivable && card.engine === "claude",
+    enabled:
+      open && card.drivable && ENGINE_FEATURES[card.engine].slashCommands,
     draft,
     setDraft: onDraftChange,
     anchor: input,

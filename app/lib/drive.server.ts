@@ -5,7 +5,7 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { appendFile, realpath, stat } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
@@ -17,13 +17,20 @@ import {
   type Question,
 } from "./board.ts";
 import { forgetCommands } from "./commands.server.ts";
-import { parseCodexApproval, renameCodexSession } from "./codex.server.ts";
-import { ENGINES, renderMacro, usesVariable, type Engine } from "./config.ts";
+import { parseCodexApproval } from "./codex.server.ts";
+import {
+  ENGINE_LABELS,
+  ENGINES,
+  renderMacro,
+  usesVariable,
+  type Engine,
+} from "./config.ts";
 import { configOrDefaults } from "./config.server.ts";
 import { BIN_DIRS, findBin, SHELL } from "./bins.server.ts";
 import { cmuxCli, cmuxRpc } from "./cmux.server.ts";
 import {
   exclusive,
+  harnessOf,
   HARNESSES,
   pause,
   readScreen,
@@ -63,83 +70,72 @@ export interface LiveSession {
   transcript: string | null;
 }
 
-// A resumed Codex session stays filed under its old surface until its next
-// prompt, so seamux remembers where it resumed it until cmux catches up.
-// Kept on globalThis, so a hot reload doesn't forget it.
-const codexResumed = ((globalThis as any).__seamuxCodexResumed ??= new Map<
+// A resumed session of a harness cmux files only once a prompt goes in
+// stays under its old surface until then, so seamux remembers where it
+// resumed it until cmux catches up. Kept on globalThis, so a hot reload
+// doesn't forget it.
+const resumedUnfiled = ((globalThis as any).__seamuxResumedUnfiled ??= new Map<
   string,
-  Surface
->()) as Map<string, Surface>;
+  { engine: Engine; surface: Surface }
+>()) as Map<string, { engine: Engine; surface: Surface }>;
 
-// sessionId -> every live Claude or Codex session cmux hosts. Claude is live
-// while cmux marks it active for its surface. Codex never gets that mark,
-// so a Codex session is live while its process is. cmux sometimes loses a
-// Claude session's pid and can't tell, so `claude agents` decides those.
+// sessionId -> every live session cmux hosts of a harness seamux drives.
+// One cmux marks active for its surface is live while it has the mark;
+// one that never gets it, such as Codex, is live while its process is.
+// cmux sometimes loses a session's pid and can't tell, so the harness's
+// own list of running sessions decides those, where it has one.
 export async function listLive(): Promise<Map<string, LiveSession>> {
   const stdout = await cmuxCli(["sessions", "list", "--json"], {
     maxBuffer: 16 * 1024 * 1024,
   });
   const { sessions } = JSON.parse(stdout) as { sessions: CmuxSession[] };
-  const pidless = sessions.some(
-    (s) =>
-      s.agent === "claude" &&
-      s.active_for_surface &&
-      s.stored_pid_exists == null,
+  const pidless = new Set(
+    sessions.flatMap((s) => {
+      const h = harnessOf(s.agent);
+      return h?.running && s.active_for_surface && s.stored_pid_exists == null
+        ? [h]
+        : [];
+    }),
   );
-  const running = pidless ? await runningClaudeSessions() : new Set<string>();
+  const running = new Set(
+    (await Promise.all([...pidless].map((h) => h.running!()))).flatMap(
+      (ids) => [...ids],
+    ),
+  );
   const map = new Map<string, LiveSession>();
   for (const s of sessions) {
-    if (s.agent === "claude" && !s.active_for_surface) continue;
+    const harness = harnessOf(s.agent);
+    if (!harness) continue;
+    if (harness.markedActive && !s.active_for_surface) continue;
     if (s.stored_pid_exists == null) {
-      if (s.agent !== "claude" || !running.has(s.session_id)) continue;
+      if (!harness.running || !running.has(s.session_id)) continue;
     } else if (!s.stored_pid_exists) continue;
-    if (s.agent !== "claude" && s.agent !== "codex") continue;
     map.set(s.session_id, {
-      engine: s.agent,
+      engine: harness.engine,
       surface: { surfaceId: s.surface_id, workspaceId: s.workspace_id },
       cwd: s.cwd ?? null,
       transcript: s.transcript_path ?? null,
     });
   }
-  if (codexResumed.size > 0) {
+  if (resumedUnfiled.size > 0) {
     const { workspaces } = await rpc<{ workspaces: { id: string }[] }>(
       "workspace.list",
       {},
     );
-    for (const [id, surface] of codexResumed) {
+    for (const [id, { engine, surface }] of resumedUnfiled) {
       const filed = sessions.find((s) => s.session_id === id);
       if (filed?.surface_id === surface.surfaceId) {
-        codexResumed.delete(id);
+        resumedUnfiled.delete(id);
       } else if (!workspaces.some((w) => w.id === surface.workspaceId)) {
         // Exited before its first prompt: its workspace closed with it.
-        codexResumed.delete(id);
+        resumedUnfiled.delete(id);
         map.delete(id);
       } else {
-        map.set(id, { engine: "codex", surface, cwd: null, transcript: null });
+        map.set(id, { engine, surface, cwd: null, transcript: null });
       }
     }
   }
   return map;
-}
-
-// The session ids of every Claude Code process still running.
-async function runningClaudeSessions(): Promise<Set<string>> {
-  const agents = await run("claude", ["agents", "--json", "--all"], {
-    maxBuffer: 32 * 1024 * 1024,
-    timeout: 10_000,
-  }).then(
-    ({ stdout }) =>
-      JSON.parse(stdout) as {
-        pid?: number | null;
-        sessionId?: string | null;
-      }[],
-    () => [],
-  );
-  return new Set(
-    agents
-      .filter((a) => a.sessionId && a.pid && processAlive(a.pid))
-      .map((a) => a.sessionId!),
-  );
 }
 
 // Whether a session still runs, told as the board tells a closed chat:
@@ -171,16 +167,6 @@ export async function sessionsAlive(): Promise<Alive> {
     return (id) => known.has(id) || jobs.has(id.slice(0, 8));
   } catch {
     return null;
-  }
-}
-
-function processAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    // EPERM: alive, but someone else's.
-    return (err as NodeJS.ErrnoException).code === "EPERM";
   }
 }
 
@@ -669,25 +655,26 @@ async function launch(
   return surface;
 }
 
-// Codex picks its own session id, and cmux files it under the surface once
-// the first prompt goes in, a couple of seconds after the folder is
-// trusted. Dispatching waits for it, to know which card is the new one.
-const CODEX_FILED_MS = 60_000;
+// A harness that picks its own session id, as Codex does, is filed by cmux
+// under the surface once the first prompt goes in, a couple of seconds after
+// the folder is trusted. Dispatching waits for it, to know which card is the
+// new one.
+const FILED_MS = 60_000;
 
-async function codexSessionIn(surface: Surface): Promise<string> {
-  const deadline = Date.now() + CODEX_FILED_MS;
+async function sessionIn(engine: Engine, surface: Surface): Promise<string> {
+  const deadline = Date.now() + FILED_MS;
   while (Date.now() < deadline) {
     await pause(1000);
     for (const [id, live] of await listLive()) {
       if (
-        live.engine === "codex" &&
+        live.engine === engine &&
         live.surface.surfaceId === surface.surfaceId
       )
         return id;
     }
   }
   throw new Error(
-    "Codex started, but cmux never reported its session. Check its workspace",
+    `${ENGINE_LABELS[engine]} started, but cmux never reported its session. Check its workspace`,
   );
 }
 
@@ -717,7 +704,8 @@ export async function resume(
     }
     const args = HARNESSES[engine].resumeArgs(sessionId);
     const surface = await launch(engine, cwd, title, args, true);
-    if (engine === "codex") codexResumed.set(sessionId, surface);
+    if (HARNESSES[engine].filedOnPrompt)
+      resumedUnfiled.set(sessionId, { engine, surface });
   } catch (err) {
     resuming.delete(sessionId);
     throw err;
@@ -748,14 +736,9 @@ export async function renameLive(sessionId: string, name: string) {
   } catch {}
 }
 
-// A closed chat's name lives in its transcript, as the lines `/rename`
-// writes; Claude Code reads the last of them when the chat is resumed.
-// Appending adds to the transcript and changes nothing already in it. Not
-// while a resume is starting, since the new process would write its old
-// name back.
-//
-// Codex keeps names apart from transcripts, in its session index, where
-// `/rename` adds a line and the last one wins; seamux adds one the same way.
+// A closed chat is named where its harness keeps names (renameClosed on its
+// Harness). Not while a resume is starting, since the new process would
+// write its old name back.
 export async function renameClosed(
   sessionId: string,
   transcript: string,
@@ -766,19 +749,7 @@ export async function renameClosed(
   if (started && Date.now() - started < RESUME_GUARD_MS) {
     throw new Error("This chat is resuming; rename it once it is open");
   }
-  if (engine === "codex") {
-    await renameCodexSession(sessionId, name);
-    return;
-  }
-  await appendFile(
-    transcript,
-    [
-      { type: "custom-title", customTitle: name, sessionId },
-      { type: "agent-name", agentName: name, sessionId },
-    ]
-      .map((line) => JSON.stringify(line) + "\n")
-      .join(""),
-  );
+  await HARNESSES[engine].renameClosed(sessionId, transcript, name);
 }
 
 // Brings a stopped background session back in a new cmux workspace, with
@@ -1037,21 +1008,20 @@ export async function dispatch(input: DispatchInput): Promise<string> {
       worker: input.worker ?? null,
     });
 
-  // Codex has no --session-id or --name: it picks its id, and titles the
-  // session itself after the first turn.
-  if (engine === "codex") {
-    const surface = await launch("codex", where, name, [first], false);
-    const sessionId = await codexSessionIn(surface);
+  const { identify } = HARNESSES[engine];
+  if (!identify) {
+    const surface = await launch(engine, where, name, [first], false);
+    const sessionId = await sessionIn(engine, surface);
     record(sessionId);
     return sessionId;
   }
   const sessionId = randomUUID();
   record(sessionId);
   await launch(
-    "claude",
+    engine,
     where,
     name,
-    ["--session-id", sessionId, "--name", name, first],
+    [...identify(sessionId, name), first],
     false,
   );
   return sessionId;
@@ -1063,9 +1033,13 @@ export async function fork(
   parentId: string,
   cwd: string,
   prompt: string,
+  engine: Engine,
 ): Promise<string> {
   const text = prompt.trim();
   if (!text) throw new Error("Say what the tangent is");
+  const forkArgs = HARNESSES[engine].fork;
+  if (!forkArgs)
+    throw new Error(`${ENGINE_LABELS[engine]} chats can't be forked`);
   const sessionId = randomUUID();
   const inUse = await namesInUse();
   const base = nameFrom(text);
@@ -1081,19 +1055,10 @@ export async function fork(
     worker: null,
   });
   await launch(
-    "claude",
+    engine,
     cwd,
     name,
-    [
-      "--resume",
-      parentId,
-      "--fork-session",
-      "--session-id",
-      sessionId,
-      "--name",
-      name,
-      asPrompt(text),
-    ],
+    [...forkArgs(parentId, sessionId, name), asPrompt(text)],
     false,
   );
   return sessionId;

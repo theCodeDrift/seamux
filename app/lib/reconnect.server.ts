@@ -9,6 +9,7 @@
 import { atRest, type Card } from "./board.ts";
 import { loadBoard } from "./board.server";
 import { resumeTurn } from "./drive.server";
+import { HARNESSES } from "./harness.server";
 import { queuedFor } from "./store.server";
 
 const TICK_MS = 10_000;
@@ -69,9 +70,9 @@ async function tick() {
   }
 }
 
-// Whether a chat is due its resume, the API aside: a live Claude Code chat
-// at rest on a request that failed since the board started, not resumed for
-// that one yet, with tries left and its backoff over.
+// Whether a chat is due its resume, the API aside: a live chat of a harness
+// that reconnects, at rest on a request that failed since the board started,
+// not resumed for that one yet, with tries left and its backoff over.
 export function due(
   card: Card,
   now: number,
@@ -80,7 +81,7 @@ export function due(
 ): boolean {
   if (
     card.column === "done" ||
-    card.engine !== "claude" ||
+    !HARNESSES[card.engine].reconnects ||
     card.apiError?.kind !== "server_error" ||
     !atRest(card) ||
     !card.drivable ||
