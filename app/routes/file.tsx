@@ -147,7 +147,7 @@ export default function FileViewer({ loaderData }: Route.ComponentProps) {
                 { replace: true, preventScrollReset: true },
               );
             }}
-            className="h-7 shrink-0 rounded-md border bg-background px-2 text-xs text-foreground"
+            className="h-7 shrink-0 rounded-md border bg-background pr-3 pl-2 text-xs text-foreground"
           >
             <option value="raw">Raw</option>
             {renderable && <option value="rendered">Rendered</option>}

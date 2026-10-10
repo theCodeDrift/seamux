@@ -266,7 +266,7 @@ export function DispatchBar({
             value={chosen}
             onChange={(e) => setEngine(e.target.value as Engine)}
             title="The agent the new session runs"
-            className="order-3 shrink-0 rounded-lg border bg-background px-2 py-1.5 text-sm md:order-none"
+            className="order-3 shrink-0 rounded-lg border bg-background py-1.5 pr-3 pl-2 text-sm md:order-none"
           >
             {available.map((e) => (
               <option key={e} value={e}>
