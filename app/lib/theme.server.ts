@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 
-import { openStore } from "./store.server.ts";
+import { openStore, readValue, writeValue } from "./store.server.ts";
 import {
   DEFAULT_THEME,
   isThemeName,
@@ -18,31 +18,8 @@ import {
 
 const PREFIX = "theme:";
 
-function get(key: string): unknown {
-  const row = openStore()
-    .prepare(`SELECT value FROM config WHERE key = ?`)
-    .get(key) as { value: string } | undefined;
-  if (!row) return undefined;
-  try {
-    return JSON.parse(row.value);
-  } catch {
-    return undefined;
-  }
-}
-
-function put(key: string, value: unknown) {
-  const store = openStore();
-  if (value === undefined) {
-    store.prepare(`DELETE FROM config WHERE key = ?`).run(key);
-    return;
-  }
-  store
-    .prepare(
-      `INSERT INTO config (key, value) VALUES (?, ?)
-       ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
-    )
-    .run(key, JSON.stringify(value));
-}
+const get = readValue;
+const put = writeValue;
 
 function rows(): { key: string; value: string }[] {
   return openStore()

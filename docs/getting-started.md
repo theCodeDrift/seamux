@@ -144,7 +144,7 @@ Switches on remote connections: mDNS for your own network, and a Cloudflare tunn
 
 ### In the browser
 
-Some choices are kept in the browser rather than the store: light or dark (the board follows the OS until you pick the other one with the header toggle, and again once you flip it back), whether DONE is shown, project colours, whether to send desktop notifications, whether to send diagnostics, and whether to blur cards for screenshots.
+Some choices are kept in the browser rather than the store: light or dark (the board follows the OS until you pick the other one with the header toggle, and again once you flip it back), whether DONE is shown, whether to send desktop notifications, whether to send diagnostics, and whether to blur cards for screenshots.
 
 ## `.seamux.json`
 

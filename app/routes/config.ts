@@ -3,10 +3,12 @@ import { data } from "react-router";
 import type { Route } from "./+types/config";
 import {
   addDirectory,
+  importProjectColors,
   isMacroName,
   removeDirectory,
   setDefaultEngine,
   setMacro,
+  setProjectColor,
   setWorktreeByDefault,
 } from "~/lib/config.server";
 import { forgetCommands } from "~/lib/commands.server";
@@ -44,6 +46,8 @@ const INTENTS = new Set([
   "activate-theme",
   "theme-set",
   "clear-themes",
+  "project-color",
+  "import-project-colors",
 ]);
 
 export interface ConfigResult {
@@ -67,6 +71,11 @@ async function perform(intent: string, form: FormData, request: Request) {
     setMacro(name, intent === "save-macro" ? field("text") : null);
   } else if (intent === "remote" || intent === "tunnel" || intent === "mdns") {
     setRemote(intent, field("on") === "true", request);
+  } else if (intent === "project-color") {
+    const slot = field("slot");
+    setProjectColor(field("project"), slot ? Number(slot) : null);
+  } else if (intent === "import-project-colors") {
+    importProjectColors(JSON.parse(field("colors") || "{}"));
   } else if (intent === "clear-commands") {
     forgetCommands();
   } else if (intent === "save-theme") {

@@ -803,16 +803,16 @@ function settlePins(
   const rows = pins();
   let changed = false;
   for (const pin of rows) {
-    const row = agents.find((a) => a.sessionId === pin.session_id);
+    const row = agents.find((a) => a.sessionId === pin.sessionId);
     if (row?.pid != null) {
-      notePinProcess(pin.session_id, row.pid, row.startedAt);
-    } else if (liveKnown && closed(pin.session_id)) {
+      notePinProcess(pin.sessionId, row.pid, row.startedAt);
+    } else if (liveKnown && closed(pin.sessionId)) {
       const next =
-        pin.pid != null && pin.started_at != null
-          ? inProcess.get(processKey(pin.pid, pin.started_at))
+        pin.pid != null && pin.startedAt != null
+          ? inProcess.get(processKey(pin.pid, pin.startedAt))
           : undefined;
-      if (next) carryPin(pin.session_id, next);
-      else setPinned(pin.session_id, false);
+      if (next) carryPin(pin.sessionId, next);
+      else setPinned(pin.sessionId, false);
       changed = true;
     }
   }
@@ -1034,7 +1034,7 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
   } catch (err) {
     warnings.push(`Pin store unavailable: ${(err as Error).message}`);
   }
-  const pinned = new Set(pinRows.map((p) => p.session_id));
+  const pinned = new Set(pinRows.map((p) => p.sessionId));
 
   // DONE: a chat the user closed recently, its transcript written within the
   // window.
@@ -1102,7 +1102,7 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
   for (const card of cards) {
     card.pinned = pinned.has(card.sessionId);
     card.clearedFrom =
-      pinRows.find((p) => p.session_id === card.sessionId)?.cleared_from ??
+      pinRows.find((p) => p.sessionId === card.sessionId)?.clearedFrom ??
       null;
   }
   try {
@@ -1143,7 +1143,7 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
   // place while its turn writes to the transcript. Pinned cards keep the
   // order the user dragged them into instead.
   cards.sort((a, b) => (a.lastPromptAt ?? 0) - (b.lastPromptAt ?? 0));
-  const pinRank = new Map(pinRows.map((p, i) => [p.session_id, i]));
+  const pinRank = new Map(pinRows.map((p, i) => [p.sessionId, i]));
   const rank = (c: Card) => pinRank.get(c.sessionId) ?? pinRows.length;
   cards.sort((a, b) => rank(a) - rank(b));
   // Without both sources, a worker missing from them may still run.

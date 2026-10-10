@@ -255,23 +255,49 @@ function shortPath(cwd: string): string {
   return cwd.replace(/^\/Users\/[^/]+/, "~");
 }
 
-// Colour slots picked for projects, keyed by project path. Kept in this
-// browser for now, until seamux has a config of its own. An older browser
-// kept the colour itself, which storedSlot reads as its slot.
-const ProjectColorsContext = createContext<{
-  colors: Record<string, number | string>;
-  setColor: (project: string, slot: number | null) => void;
-}>({ colors: {}, setColor: () => {} });
+// Colour slots picked for projects, keyed by project path, from the config.
+const ProjectColorsContext = createContext<Record<string, number>>({});
+
+// Where the board kept project colours before they moved into the config.
+const LEGACY_COLORS_KEY = "seamux:project-colors";
+
+// Hands the colours this browser kept to the config, once, and forgets them.
+// A project that has a colour there already keeps it.
+function useImportLegacyColors() {
+  const fetcher = useFetcher();
+  useEffect(() => {
+    let kept: string | null = null;
+    try {
+      kept = localStorage.getItem(LEGACY_COLORS_KEY);
+      localStorage.removeItem(LEGACY_COLORS_KEY);
+    } catch {}
+    if (!kept) return;
+    fetcher.submit(
+      { intent: "import-project-colors", colors: kept },
+      { method: "post", action: "/config" },
+    );
+    // Once, on mount.
+  }, []);
+}
 
 // The project's colour, and a picker for it on click.
 function PathSwatch({ cwd }: { cwd: string }) {
-  const { colors, setColor } = useContext(ProjectColorsContext);
+  const colors = useContext(ProjectColorsContext);
+  const fetcher = useFetcher();
   const project = projectOf(cwd);
-  const picked = storedSlot(colors[project]);
+  // The pick being saved shows at once.
+  const sent = fetcher.formData?.get("slot");
+  const picked =
+    sent === undefined || sent === null
+      ? colors[project]
+      : storedSlot(Number(sent) || null);
   const current = picked ?? hashedSlot(project);
   const [open, setOpen] = useState(false);
   const pick = (slot: number | null) => {
-    setColor(project, slot);
+    fetcher.submit(
+      { intent: "project-color", project, slot: slot === null ? "" : slot },
+      { method: "post", action: "/config" },
+    );
     setOpen(false);
   };
   return (
@@ -2092,20 +2118,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       return omit(all);
     });
   }, [board, setDrafts]);
-  const [colors, setColors] = useLocalStorage<Record<string, number | string>>(
-    "seamux:project-colors",
-    {},
-  );
-  const setColor = (project: string, slot: number | null) =>
-    setColors((c) => {
-      const { [project]: _, ...rest } = c;
-      return slot !== null ? { ...rest, [project]: slot } : rest;
-    });
+  useImportLegacyColors();
 
   return (
     <OptimisticContext.Provider value={optimistic.context}>
       <DraftsContext.Provider value={draftsContext}>
-        <ProjectColorsContext.Provider value={{ colors, setColor }}>
+        <ProjectColorsContext.Provider value={config.projectColors}>
           {/* No bottom padding below md: the carousel is sized to end at the
               screen's foot, and any page left below it lets the page scroll
               on, pushing the first card's top under the tab strip. */}

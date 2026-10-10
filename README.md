@@ -36,7 +36,7 @@ The board is rebuilt every 3 seconds while the tab is visible, from:
 - `cmux sessions list`, which finds each session's terminal (its cmux surface) so seamux can type into it. It is also the only list of live Codex sessions, which is why seamux sees a Codex session only if it runs in cmux.
 - The transcripts in `~/.claude/projects/` and `~/.codex/sessions/`, which hold each conversation, whether a turn is still running, open questions, subagents, and how full the context window is. cmux's own idle/running state for Codex goes stale, so a Codex card takes it from the transcript, and reads an approval off the terminal.
 
-The store at `data/seamux.db`, in `~/.seamux` or a clone, holds only what those don't record: subagent lifecycle from the hooks, what each dispatched session was started for, pins and their order, queued messages, settings, and fan-out records. Deleting `data/` loses those and never a session.
+The store at `data/seamux.db`, in `~/.seamux` or a clone, holds only what those don't record. What you chose (settings, themes, macros, pins and their order, project colours) is kept for good. What only matters for minutes (subagent lifecycle from the hooks, what each dispatched session was started for, queued messages) is dropped and made afresh when an upgrade changes its shape, rather than migrated. Fan-out records sit beside the store in `data/`. Deleting `data/` loses those and never a session.
 
 ### Columns
 

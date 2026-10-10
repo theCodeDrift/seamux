@@ -12,6 +12,27 @@ import { DATA_DIR } from "./paths.server.ts";
 
 export const DB_PATH = process.env.SEAMUX_DB ?? join(DATA_DIR, "seamux.db");
 
+// Two kinds of table. `config` holds what the user chose: settings, themes,
+// macros, pins, project colours. It is a JSON value per key, so its shape
+// never changes: something new is a new key, and the code that reads a key
+// accepts the shapes it held before. It is never dropped.
+//
+// Every other table can be lost: hook records, dispatch records and queued
+// messages, which matter for minutes. When their schema changes, bump
+// SCHEMA_VERSION and they are dropped and made afresh on the next open,
+// rather than migrated. Keep nothing in them the user would miss.
+const CONFIG = `
+  -- A JSON value per key; a missing key means the default.
+  CREATE TABLE IF NOT EXISTS config (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+`;
+
+export const SCHEMA_VERSION = 1;
+
+const REBUILT = ["subagents", "dispatches", "queued_messages"];
+
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS subagents (
     agent_id        TEXT PRIMARY KEY,
@@ -38,19 +59,6 @@ const SCHEMA = `
     created_at     INTEGER NOT NULL
   );
 
-  -- Sessions the user pinned, because they are meant to run for a long time,
-  -- in the order they dragged them into; a new pin goes last. The Claude Code
-  -- process a pinned chat last ran in, which \`/clear\` keeps under a new
-  -- session id, and the chat a pin was carried from by one.
-  CREATE TABLE IF NOT EXISTS pins (
-    session_id   TEXT PRIMARY KEY,
-    pinned_at    INTEGER NOT NULL,
-    position     INTEGER NOT NULL DEFAULT 0,
-    pid          INTEGER,
-    started_at   INTEGER,
-    cleared_from TEXT
-  );
-
   -- Messages the user wrote while a chat was working, held here instead of in
   -- Claude Code's queue so they can be edited. Sent in id order, one per
   -- turn, once the chat is idle; a row goes as it is sent.
@@ -62,37 +70,73 @@ const SCHEMA = `
   );
   CREATE INDEX IF NOT EXISTS queued_messages_session
     ON queued_messages (session_id);
-
-  -- The user's settings, from the board's config dialog. A JSON value per key;
-  -- a missing key means the default.
-  CREATE TABLE IF NOT EXISTS config (
-    key   TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-  );
 `;
 
 let db: DatabaseSync | null = null;
 
-// Columns added after a table first shipped, which CREATE TABLE IF NOT
-// EXISTS leaves out of an existing store.
-function migrate(store: DatabaseSync): void {
-  const pinColumns = store
-    .prepare(`PRAGMA table_info(pins)`)
-    .all() as unknown as { name: string }[];
-  if (!pinColumns.some((c) => c.name === "position")) {
-    store.exec(`
-      ALTER TABLE pins ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
-      UPDATE pins SET position =
-        (SELECT COUNT(*) FROM pins p WHERE p.pinned_at < pins.pinned_at);
-    `);
+// Drops and remakes the tables that can be lost when SCHEMA_VERSION has
+// moved. Pins had a table of their own before they moved into config, and
+// are carried over from it.
+function rebuild(store: DatabaseSync): void {
+  store.exec("BEGIN IMMEDIATE");
+  try {
+    const { user_version } = store.prepare(`PRAGMA user_version`).get() as {
+      user_version: number;
+    };
+    if (user_version !== SCHEMA_VERSION) {
+      carryLegacyPins(store);
+      for (const table of [...REBUILT, "pins"]) {
+        store.exec(`DROP TABLE IF EXISTS ${table}`);
+      }
+      store.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+    }
+    store.exec(SCHEMA);
+    store.exec("COMMIT");
+  } catch (err) {
+    store.exec("ROLLBACK");
+    throw err;
   }
-  if (!pinColumns.some((c) => c.name === "pid")) {
-    store.exec(`
-      ALTER TABLE pins ADD COLUMN pid INTEGER;
-      ALTER TABLE pins ADD COLUMN started_at INTEGER;
-      ALTER TABLE pins ADD COLUMN cleared_from TEXT;
-    `);
-  }
+}
+
+function carryLegacyPins(store: DatabaseSync): void {
+  const table = store
+    .prepare(
+      `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'pins'`,
+    )
+    .get();
+  if (!table || readValue(PINS_KEY, store) !== undefined) return;
+  const columns = (
+    store.prepare(`PRAGMA table_info(pins)`).all() as unknown as {
+      name: string;
+    }[]
+  ).map((c) => c.name);
+  const has = (c: string) => (columns.includes(c) ? c : "NULL");
+  const rows = store
+    .prepare(
+      `SELECT session_id, pinned_at, ${has("pid")} AS pid,
+              ${has("started_at")} AS started_at,
+              ${has("cleared_from")} AS cleared_from
+       FROM pins ORDER BY ${has("position")}, pinned_at`,
+    )
+    .all() as unknown as {
+    session_id: string;
+    pinned_at: number;
+    pid: number | null;
+    started_at: number | null;
+    cleared_from: string | null;
+  }[];
+  if (rows.length === 0) return;
+  writeValue(
+    PINS_KEY,
+    rows.map((r): PinRow => ({
+      sessionId: r.session_id,
+      pinnedAt: r.pinned_at,
+      pid: r.pid,
+      startedAt: r.started_at,
+      clearedFrom: r.cleared_from,
+    })),
+    store,
+  );
 }
 
 export function openStore(): DatabaseSync {
@@ -100,11 +144,64 @@ export function openStore(): DatabaseSync {
   mkdirSync(dirname(DB_PATH), { recursive: true });
   // Many hooks write at once during a fan-out, so wait on locks from the
   // first statement, including the switch to WAL.
-  db = new DatabaseSync(DB_PATH, { timeout: 5000 });
-  db.exec("PRAGMA journal_mode = WAL;");
-  db.exec(SCHEMA);
-  migrate(db);
+  const store = new DatabaseSync(DB_PATH, { timeout: 5000 });
+  store.exec("PRAGMA journal_mode = WAL;");
+  store.exec(CONFIG);
+  rebuild(store);
+  db = store;
   return db;
+}
+
+// A config key's value, parsed, or undefined when it is missing or broken.
+export function readValue(key: string, store = openStore()): unknown {
+  const row = store
+    .prepare(`SELECT value FROM config WHERE key = ?`)
+    .get(key) as { value: string } | undefined;
+  if (!row) return undefined;
+  try {
+    return JSON.parse(row.value);
+  } catch {
+    return undefined;
+  }
+}
+
+// `undefined` removes the key.
+export function writeValue(
+  key: string,
+  value: unknown,
+  store = openStore(),
+): void {
+  if (value === undefined) {
+    store.prepare(`DELETE FROM config WHERE key = ?`).run(key);
+    return;
+  }
+  store
+    .prepare(
+      `INSERT INTO config (key, value) VALUES (?, ?)
+       ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+    )
+    .run(key, JSON.stringify(value));
+}
+
+// Reads a key, changes it, and writes it back if `change` returned a new
+// value, holding the write lock throughout so two changes can't interleave.
+export function updateValue<T>(
+  key: string,
+  read: (raw: unknown) => T,
+  change: (value: T) => T,
+): T {
+  const store = openStore();
+  store.exec("BEGIN IMMEDIATE");
+  try {
+    const before = read(readValue(key, store));
+    const after = change(before);
+    if (after !== before) writeValue(key, after, store);
+    store.exec("COMMIT");
+    return after;
+  } catch (err) {
+    store.exec("ROLLBACK");
+    throw err;
+  }
 }
 
 export interface SubagentRow {
@@ -244,28 +341,38 @@ export function recentDispatchCwds(limit = 50): string[] {
   ).map((r) => r.cwd);
 }
 
-export function pinnedSessions(): string[] {
-  return (
-    openStore()
-      .prepare(`SELECT session_id FROM pins ORDER BY position, pinned_at`)
-      .all() as unknown as { session_id: string }[]
-  ).map((r) => r.session_id);
+// Sessions the user pinned, because they are meant to run for a long time,
+// in the order they dragged them into; a new pin goes last. Each notes the
+// Claude Code process the chat last ran in, which `/clear` keeps under a new
+// session id, and the chat it was carried from by one.
+export interface PinRow {
+  sessionId: string;
+  pinnedAt: number;
+  pid: number | null;
+  startedAt: number | null;
+  clearedFrom: string | null;
 }
 
-export interface PinRow {
-  session_id: string;
-  pid: number | null;
-  started_at: number | null;
-  cleared_from: string | null;
+const PINS_KEY = "pins";
+
+function readPins(raw: unknown): PinRow[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (p): p is PinRow =>
+      typeof p?.sessionId === "string" && typeof p?.pinnedAt === "number",
+  );
+}
+
+function updatePins(change: (pins: PinRow[]) => PinRow[]): void {
+  updateValue(PINS_KEY, readPins, change);
 }
 
 export function pins(): PinRow[] {
-  return openStore()
-    .prepare(
-      `SELECT session_id, pid, started_at, cleared_from FROM pins
-       ORDER BY position, pinned_at`,
-    )
-    .all() as unknown as PinRow[];
+  return readPins(readValue(PINS_KEY));
+}
+
+export function pinnedSessions(): string[] {
+  return pins().map((p) => p.sessionId);
 }
 
 // Notes the process a pinned chat runs in, when it has changed.
@@ -274,30 +381,25 @@ export function notePinProcess(
   pid: number,
   startedAt: number,
 ): void {
-  openStore()
-    .prepare(
-      `UPDATE pins SET pid = ?, started_at = ?
-       WHERE session_id = ? AND (pid IS NOT ? OR started_at IS NOT ?)`,
-    )
-    .run(pid, startedAt, sessionId, pid, startedAt);
+  updatePins((all) => {
+    const pin = all.find((p) => p.sessionId === sessionId);
+    if (!pin || (pin.pid === pid && pin.startedAt === startedAt)) return all;
+    return all.map((p) => (p === pin ? { ...p, pid, startedAt } : p));
+  });
 }
 
 // Moves a pin, in its place, to the session `/clear` carried its chat on
 // under. If that session is pinned already, the old pin just goes.
 export function carryPin(from: string, to: string): void {
-  const store = openStore();
-  const taken = store
-    .prepare(`SELECT 1 FROM pins WHERE session_id = ?`)
-    .get(to);
-  if (taken) {
-    store.prepare(`DELETE FROM pins WHERE session_id = ?`).run(from);
-  } else {
-    store
-      .prepare(
-        `UPDATE pins SET session_id = ?, cleared_from = ? WHERE session_id = ?`,
-      )
-      .run(to, from, from);
-  }
+  updatePins((all) => {
+    if (!all.some((p) => p.sessionId === from)) return all;
+    if (all.some((p) => p.sessionId === to)) {
+      return all.filter((p) => p.sessionId !== from);
+    }
+    return all.map((p) =>
+      p.sessionId === from ? { ...p, sessionId: to, clearedFrom: from } : p,
+    );
+  });
 }
 
 export function setPinned(
@@ -305,40 +407,35 @@ export function setPinned(
   pinned: boolean,
   now = Date.now(),
 ): void {
-  const store = openStore();
-  if (pinned) {
-    store
-      .prepare(
-        `INSERT INTO pins (session_id, pinned_at, position)
-         VALUES (?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM pins))
-         ON CONFLICT (session_id) DO NOTHING`,
-      )
-      .run(sessionId, now);
-  } else {
-    store.prepare(`DELETE FROM pins WHERE session_id = ?`).run(sessionId);
-  }
+  updatePins((all) => {
+    const has = all.some((p) => p.sessionId === sessionId);
+    if (pinned === has) return all;
+    if (!pinned) return all.filter((p) => p.sessionId !== sessionId);
+    return [
+      ...all,
+      {
+        sessionId,
+        pinnedAt: now,
+        pid: null,
+        startedAt: null,
+        clearedFrom: null,
+      },
+    ];
+  });
 }
 
 // Moves a pinned session to just before `before`, or to the end when
-// `before` is null or not pinned, and renumbers the rest.
+// `before` is null or not pinned.
 export function movePin(sessionId: string, before: string | null): void {
-  const store = openStore();
-  store.exec("BEGIN IMMEDIATE");
-  try {
-    const order = pinnedSessions();
-    if (!order.includes(sessionId)) throw new Error("Not pinned");
-    const rest = order.filter((id) => id !== sessionId);
-    const at = before === null ? -1 : rest.indexOf(before);
-    rest.splice(at === -1 ? rest.length : at, 0, sessionId);
-    const update = store.prepare(
-      `UPDATE pins SET position = ? WHERE session_id = ?`,
-    );
-    rest.forEach((id, i) => update.run(i, id));
-    store.exec("COMMIT");
-  } catch (err) {
-    store.exec("ROLLBACK");
-    throw err;
-  }
+  updatePins((all) => {
+    const pin = all.find((p) => p.sessionId === sessionId);
+    if (!pin) throw new Error("Not pinned");
+    const rest = all.filter((p) => p !== pin);
+    const at =
+      before === null ? -1 : rest.findIndex((p) => p.sessionId === before);
+    rest.splice(at === -1 ? rest.length : at, 0, pin);
+    return rest;
+  });
 }
 
 export interface QueuedRow {

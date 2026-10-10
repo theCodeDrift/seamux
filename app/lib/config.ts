@@ -156,10 +156,14 @@ export interface Config {
   // What the dispatch bar launches unless it is switched for one dispatch.
   defaultEngine: Engine;
   macros: Record<MacroName, { text: string; custom: boolean }>;
+  // Colour slots picked for projects, by project path
+  // (app/lib/project-colors.ts). A project not here gets a hashed slot.
+  projectColors: Record<string, number>;
 }
 
 export const DEFAULT_CONFIG: Config = {
   directories: [],
+  projectColors: {},
   worktreeByDefault: false,
   defaultEngine: "claude",
   macros: Object.fromEntries(

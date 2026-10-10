@@ -12,34 +12,16 @@ import {
   type Config,
   type MacroName,
 } from "./config.ts";
-import { openStore } from "./store.server.ts";
+import { storedSlot } from "./project-colors.ts";
+import { readValue, updateValue, writeValue } from "./store.server.ts";
 
 function get<T>(key: string, fallback: T): T {
-  const row = openStore()
-    .prepare(`SELECT value FROM config WHERE key = ?`)
-    .get(key) as { value: string } | undefined;
-  if (!row) return fallback;
-  try {
-    return JSON.parse(row.value) as T;
-  } catch {
-    return fallback;
-  }
+  const value = readValue(key);
+  return value === undefined ? fallback : (value as T);
 }
 
 // `undefined` removes the key, putting the setting back to its default.
-function put(key: string, value: unknown) {
-  const store = openStore();
-  if (value === undefined) {
-    store.prepare(`DELETE FROM config WHERE key = ?`).run(key);
-    return;
-  }
-  store
-    .prepare(
-      `INSERT INTO config (key, value) VALUES (?, ?)
-       ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
-    )
-    .run(key, JSON.stringify(value));
-}
+const put = writeValue;
 
 export function readConfig(): Config {
   const macros = { ...DEFAULT_CONFIG.macros };
@@ -58,6 +40,7 @@ export function readConfig(): Config {
       return isEngine(engine) ? engine : DEFAULT_CONFIG.defaultEngine;
     })(),
     macros,
+    projectColors: readProjectColors(get("projectColors", null)),
   };
 }
 
@@ -113,4 +96,40 @@ export function setMacro(name: MacroName, text: string | null) {
     throw new Error(`The ${MACROS[name].label} macro needs {{${required}}}`);
   }
   put(`macro:${name}`, text);
+}
+
+// The slots kept for projects, leaving out any no longer in the palette.
+function readProjectColors(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== "object") return {};
+  const colors: Record<string, number> = {};
+  for (const [project, kept] of Object.entries(raw)) {
+    const slot = storedSlot(kept);
+    if (slot !== undefined) colors[project] = slot;
+  }
+  return colors;
+}
+
+// `null` puts the project back on its hashed slot.
+export function setProjectColor(project: string, slot: number | null) {
+  if (!project) throw new Error("No project");
+  const picked = slot === null ? undefined : storedSlot(slot);
+  if (slot !== null && picked === undefined) throw new Error("Unknown colour");
+  updateValue("projectColors", readProjectColors, (colors) => {
+    const { [project]: _, ...rest } = colors;
+    return picked === undefined ? rest : { ...rest, [project]: picked };
+  });
+}
+
+// Colours a browser kept before they moved here. A project that already
+// has one here keeps it.
+export function importProjectColors(kept: unknown) {
+  const incoming = readProjectColors(kept);
+  updateValue("projectColors", readProjectColors, (colors) => {
+    const added = Object.keys(incoming).filter((p) => !(p in colors));
+    if (added.length === 0) return colors;
+    return {
+      ...Object.fromEntries(added.map((p) => [p, incoming[p]])),
+      ...colors,
+    };
+  });
 }
