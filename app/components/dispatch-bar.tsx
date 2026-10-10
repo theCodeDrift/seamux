@@ -7,6 +7,7 @@ import { AttachmentChips } from "~/components/attachments";
 import { DirectoryPicker } from "~/components/directory-picker";
 
 import { Button } from "~/components/ui/button";
+import { NativeSelect } from "~/components/ui/native-select";
 import { Textarea } from "~/components/ui/textarea";
 import {
   attachmentLabel,
@@ -262,18 +263,18 @@ export function DispatchBar({
           Dispatch at its far end. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {available.length > 1 && (
-          <select
+          <NativeSelect
             value={chosen}
             onChange={(e) => setEngine(e.target.value as Engine)}
             title="The agent the new session runs"
-            className="order-3 shrink-0 rounded-lg border bg-background py-1.5 pr-3 pl-2 text-sm md:order-none"
+            className="order-3 shrink-0 md:order-none"
           >
             {available.map((e) => (
               <option key={e} value={e}>
                 {ENGINE_LABELS[e]}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         )}
         <DirectoryPicker
           data-focus-key="dispatch:cwd"

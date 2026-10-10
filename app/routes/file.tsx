@@ -15,6 +15,7 @@ import { Markdown } from "~/components/markdown";
 import { SeamuxMark } from "~/components/seamux-mark";
 import { ThemeToggle } from "~/components/theme-toggle";
 import { Button } from "~/components/ui/button";
+import { NativeSelect } from "~/components/ui/native-select";
 import {
   dirnameOf,
   fileDownloadUrl,
@@ -130,7 +131,7 @@ export default function FileViewer({ loaderData }: Route.ComponentProps) {
           <span className="shrink-0 text-xs">{formatSize(file.size)}</span>
         )}
         {file.type === "file" && (
-          <select
+          <NativeSelect
             aria-label="Display"
             value={view}
             onChange={(e) => {
@@ -147,12 +148,13 @@ export default function FileViewer({ loaderData }: Route.ComponentProps) {
                 { replace: true, preventScrollReset: true },
               );
             }}
-            className="h-7 shrink-0 rounded-md border bg-background pr-3 pl-2 text-xs text-foreground"
+            className="shrink-0"
+            selectClassName="h-7 rounded-md py-0 pr-7 pl-2 text-xs text-foreground"
           >
             <option value="raw">Raw</option>
             {renderable && <option value="rendered">Rendered</option>}
             <option value="download">Download</option>
-          </select>
+          </NativeSelect>
         )}
         {numbered && (
           <Button
@@ -190,7 +192,9 @@ export default function FileViewer({ loaderData }: Route.ComponentProps) {
             {file.entries.map((e) => (
               <li key={e.name}>
                 <Link
-                  to={fileViewerUrl(`${file.path.replace(/\/$/, "")}/${e.name}`)}
+                  to={fileViewerUrl(
+                    `${file.path.replace(/\/$/, "")}/${e.name}`,
+                  )}
                   className="flex items-center gap-2 rounded px-2 py-1 font-mono text-xs hover:bg-muted"
                 >
                   {e.directory ? (
