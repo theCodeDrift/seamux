@@ -1,5 +1,28 @@
 # seamux
 
+## 0.4.0
+
+### Minor Changes
+
+- daddfa9: Project colours are kept in seamux's store instead of each browser, so every browser and device shows the same ones. Those a browser kept before move over the first time it opens the board, unless the project already has a colour. Pins move into the settings too. The first start after upgrading clears queued messages, subagent records and what each dispatched session was started for, so send anything still queued first. From now on, an upgrade that changes one of those tables starts it afresh instead of migrating it. Settings, themes, macros, pins and colours are always kept.
+
+### Patch Changes
+
+- c058e83: A collapsed card shows its project colour next to its title, and hovering a colour chip shows the directory the session was launched from rather than its project's.
+- caac81d: A message sent from the board to a chat that had fallen behind, such as while the Mac was busy, could stay in the chat's prompt box unsent while the board said it had gone. seamux now waits for the chat to show the message before pressing Enter, and for the box to empty after it. If the message still doesn't leave the box, the board now says so instead of reporting it sent.
+- ae2d96c: Serve a `favicon.ico`, so a browser that asks for one gets the seamux icon instead of the board logging "No route matches URL /favicon.ico".
+- 57c3e71: A card shows its subagents as one count beside its working or ready state, such as "working (6 subagents)", in place of a line for each one; the count opens the chat, whose side rail lists them.
+- 016ca2c: A chat's replies in a row, as a turn writes between its tool calls, now share one bubble in the chat log and read as one response, rather than a stack of separate bubbles.
+- cb60cea: A dispatched session whose prompt starts with a slash command, such as `/gtd daily`, now shows How to worktree by its name on its card and in the chat log, like every other dispatch, instead of its full text.
+- 7e4a23b: The chat log shows a macro seamux sent by its name, as `✦ Close session ✦` or `✦ How to worktree ✦`, instead of its full text, and a dispatched session's first message shows only what you typed. A card's last prompt does the same. A macro edited since it was sent still shows in full.
+- 38a800e: Show a message sent while a chat was working, such as a queued message sent now, in the chat log and as the card's last prompt: Claude Code records one it takes mid-turn differently, so it never appeared.
+- 7f8b83f: The agent picker in the dispatch bar, and the Display picker in the file viewer, draw their chevron inset from the right edge, where Chrome's own arrow sat against the border.
+- 635f746: A new Session information macro tells every session seamux dispatches that it runs inside seamux, its name and directory, and where to report a problem with seamux. It now comes first in a new session's prompt, then How to worktree, then `# User prompt` and what you typed. A skill as the prompt, such as `/gtd daily`, still runs. Clearing a chat from the board sends `/clear`, pauses, then sends Session information again, with How to worktree when the chat is in a worktree. The chat log shows these macros by name, and a card shows only what you typed. If you've customised the New session macro, Session information goes at its start; add `{{session_information}}` to put it somewhere else, or empty the Session information macro to leave it out.
+- c0bee4b: A slash command sent to a chat on its own, such as `/opsx:apply` or a skill, now shows in the chat log and as the card's last prompt, as it was typed. Local commands such as `/rename` still stay out of the log.
+- 4de9269: When a message doesn't send, from a card or from seamux's queue, its card now shows it in red under "Didn't send", with the reason, and the board raises an error toast. The note stays until a message goes through or you dismiss it. A failed queued message used to vanish without a word.
+
+  A message left unsent in a chat's prompt box now also shows on its card while the chat is idle. It might be a message the board sent that the chat never took, or one typed in the terminal. Send sends it as it stands, and Edit moves it into the card's input and empties the chat's box.
+
 ## 0.3.1
 
 ### Minor Changes

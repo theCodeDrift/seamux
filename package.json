@@ -1,6 +1,6 @@
 {
   "name": "seamux",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "A board over every Claude Code and Codex session on your Mac, and the tools to drive and dispatch them.",
   "license": "MIT",
   "author": "Jakob Heuser <jakob@codedrift.com>",
