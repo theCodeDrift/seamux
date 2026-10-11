@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,7 +17,11 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, beforeEach, expect, it } from "vitest";
 
-import { loadBoard, loadMessages } from "~/lib/board.server";
+import {
+  distinctDirectories,
+  loadBoard,
+  loadMessages,
+} from "~/lib/board.server";
 import { DEFAULT_CONFIG, renderMacro } from "~/lib/config";
 import { clearFailure, recordFailure } from "~/lib/send-failures.server";
 import { FakeCmux } from "./fake-cmux";
@@ -558,4 +563,25 @@ it("shows a prompt sent while a turn ran, which Claude Code logs as a queued com
     { role: "user", text: "Also the other thing", at: "2026-01-01T00:00:10Z" },
     { role: "user", text: "[Image #1] and this", at: "2026-01-01T00:00:30Z" },
   ]);
+});
+
+it("lists a directory once whatever path names it", async () => {
+  // As macOS's ~/code and ~/Code do: one folder under two spellings, which a
+  // symlink stands in for on a disk that minds case.
+  const root = mkdtempSync(join(tmpdir(), "seamux-dirs-"));
+  const code = join(root, "code");
+  mkdirSync(join(code, "app"), { recursive: true });
+  symlinkSync(code, join(root, "Code-link"));
+  const gone = join(root, "gone");
+  expect(
+    await distinctDirectories([
+      join(code, "app"),
+      join(root, "Code-link", "app"),
+      code,
+      join(root, "Code-link"),
+      gone,
+      gone,
+    ]),
+  ).toEqual([join(code, "app"), code, gone]);
+  rmSync(root, { recursive: true });
 });

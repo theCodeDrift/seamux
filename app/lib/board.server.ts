@@ -451,10 +451,7 @@ async function summarize(path: string): Promise<TranscriptSummary> {
       !summary.lastPrompt &&
       (command || !SYNTHETIC_PROMPT.test(text.trimStart()))
     ) {
-      summary.lastPrompt = promptExcerpt(
-        command ?? unwrapPasted(text),
-        macros,
-      );
+      summary.lastPrompt = promptExcerpt(command ?? unwrapPasted(text), macros);
       summary.lastPromptAt = Date.parse(o.timestamp) || null;
     }
     if (
@@ -1102,8 +1099,7 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
   for (const card of cards) {
     card.pinned = pinned.has(card.sessionId);
     card.clearedFrom =
-      pinRows.find((p) => p.sessionId === card.sessionId)?.clearedFrom ??
-      null;
+      pinRows.find((p) => p.sessionId === card.sessionId)?.clearedFrom ?? null;
   }
   try {
     for (const row of queuedFor(cards.map((c) => c.sessionId))) {
@@ -1358,8 +1354,31 @@ async function gitRepos(): Promise<string[]> {
         .map((e) => scan(join(dir, e.name), depth - 1)),
     );
   }
-  await Promise.all(REPO_ROOTS.map((r) => scan(r, 2)));
+  await Promise.all(
+    (await distinctDirectories(REPO_ROOTS)).map((r) => scan(r, 2)),
+  );
   return found;
+}
+
+// The paths with every one that names a directory already listed dropped,
+// keeping the first spelling. macOS ignores case, so ~/code and ~/Code are
+// one folder; a symlink is another way two paths meet. A path that can't be
+// read is compared by its text alone.
+export async function distinctDirectories(paths: string[]): Promise<string[]> {
+  const ids = await Promise.all(
+    paths.map((p) =>
+      stat(p).then(
+        (s) => `${s.dev}:${s.ino}`,
+        () => `path:${p}`,
+      ),
+    ),
+  );
+  const seen = new Set<string>();
+  return paths.filter((_, i) => {
+    if (seen.has(ids[i])) return false;
+    seen.add(ids[i]);
+    return true;
+  });
 }
 
 // Where new work is likely to go: directories in use right now first, then
@@ -1380,7 +1399,7 @@ export async function knownDirectories(): Promise<string[]> {
     ...dispatched,
     ...repos.sort(),
   ];
-  return [...new Set(all)];
+  return distinctDirectories([...new Set(all)]);
 }
 
 // Fan-outs still waiting on workers, and settled ones for FANOUT_VISIBLE_MS.
