@@ -1103,9 +1103,10 @@ function PinToggle({ card }: { card: BoardCard }) {
   );
 }
 
-// What a chat needs only now and then, kept behind "..." so the header
-// stays to what is used every day. Not on a closed chat: it has nothing to
-// act on.
+// What a chat needs only now and then, kept behind "..." in the full view
+// so the header stays to what is used every day. Not on the board's cards,
+// where it would shift the controls beside it. Not on a closed chat: it has
+// nothing to act on.
 function MoreActions({
   card,
   className,
@@ -1327,7 +1328,6 @@ function SessionCard({ card, now }: { card: BoardCard; now: number }) {
                 setMinimized={setMinimized}
               />
               <CardControl card={card} />
-              <MoreActions card={card} />
             </span>
           </CardTitle>
           {!minimized && (
