@@ -232,7 +232,10 @@ export default function FileViewer({ loaderData }: Route.ComponentProps) {
             className="block size-full bg-white"
           />
         ) : view === "rendered" && file.kind === "video" ? (
-          <div className="flex min-h-full items-center justify-center p-6">
+          // The frame fills the window and the picture scales within it,
+          // letterboxed: a percentage max-height on the video itself
+          // resolves against nothing and lets it overflow.
+          <div className="size-full p-6">
             {/* A new key on each change, so a file still being written
                 reloads in the player. */}
             <video
@@ -240,7 +243,7 @@ export default function FileViewer({ loaderData }: Route.ComponentProps) {
               src={fileRawUrl(file.path)}
               controls
               preload="metadata"
-              className="max-h-full max-w-full"
+              className="size-full object-contain"
             />
           </div>
         ) : view === "rendered" && file.kind === "audio" ? (
