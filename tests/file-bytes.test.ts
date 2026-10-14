@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { fileDownloadUrl, fileRawUrl, SANDBOX_FLAGS } from "~/lib/files";
-import { byteRange, loadFile } from "~/lib/files.server";
+import { byteRange, loadFile, SANDBOX_BASE } from "~/lib/files.server";
 import { loader as download } from "~/routes/file-download";
 import { loader as raw } from "~/routes/file-raw";
 
@@ -39,6 +39,19 @@ describe("file bytes", () => {
     const response = await get(raw, fileRawUrl(pdf));
     expect(response.headers.get("content-type")).toBe("application/pdf");
     expect(response.headers.get("content-security-policy")).toBeNull();
+    expect(response.headers.get("content-disposition")).toBeNull();
+  });
+
+  it("saves a PDF a rendered page opens in its own frame", async () => {
+    const pdf = join(dir, "deck.pdf");
+    writeFileSync(pdf, "%PDF-1.7\n");
+    const url = fileRawUrl(pdf, SANDBOX_BASE);
+    const framed = await get(raw, url, { "sec-fetch-dest": "iframe" });
+    expect(framed.headers.get("content-disposition")).toBe(
+      "attachment; filename*=UTF-8''deck.pdf",
+    );
+    const tab = await get(raw, url, { "sec-fetch-dest": "document" });
+    expect(tab.headers.get("content-disposition")).toBeNull();
   });
 
   it("asks the browser to save it from /file/download", async () => {

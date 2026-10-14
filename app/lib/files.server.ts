@@ -158,16 +158,24 @@ function kindOf(path: string, sample: Buffer): FileKind {
 // runs in an opaque origin and cannot act as the board. A PDF is the one
 // exception, since Chrome refuses to show one in a sandboxed document, with
 // ERR_BLOCKED_BY_CLIENT, and its viewer runs no script in the board's
-// origin anyway. `download` asks the browser to
+// origin anyway. Nor in a frame, which stays sandboxed: a PDF that a
+// rendered page opens in its own frame, by a plain link or one Chrome
+// won't download because the page's origin is opaque, is saved instead.
+// `framed` says the request is one. `download` asks the browser to
 // save the file under its own name instead of showing it. `range`, a
 // request's Range header, sends just those bytes: a video or audio player
 // asks for them to seek, and Safari won't play a video without them.
 export async function fileResponse(
   found: { path: string; stats: Stats },
-  { download = false, range = null as string | null } = {},
+  {
+    download = false,
+    framed = false,
+    range = null as string | null,
+  } = {},
 ): Promise<Response> {
   const size = found.stats.size;
   const type = contentType(found.path, await readHead(found.path, 8000));
+  if (framed && type === "application/pdf") download = true;
   const headers = new Headers({
     "Content-Type": type,
     "Accept-Ranges": "bytes",
