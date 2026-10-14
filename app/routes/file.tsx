@@ -91,7 +91,11 @@ export default function FileViewer({ loaderData }: Route.ComponentProps) {
   useWatch(file.path, file.mtime);
   const [params, setParams] = useSearchParams();
   const renderable =
-    file.type === "file" && (file.kind === "markdown" || file.kind === "html");
+    file.type === "file" &&
+    (file.kind === "markdown" ||
+      file.kind === "html" ||
+      file.kind === "video" ||
+      file.kind === "audio");
   // A link to `a.ts:12` opens a.ts at line 12: the loader found the file
   // without the line, so the line is what the request has and it lacks.
   const cited = /:(\d+)(?::\d+)?$/.exec(params.get("path") ?? "");
@@ -227,6 +231,28 @@ export default function FileViewer({ loaderData }: Route.ComponentProps) {
             sandbox="allow-scripts allow-popups allow-downloads"
             className="block size-full bg-white"
           />
+        ) : view === "rendered" && file.kind === "video" ? (
+          <div className="flex min-h-full items-center justify-center p-6">
+            {/* A new key on each change, so a file still being written
+                reloads in the player. */}
+            <video
+              key={file.mtime}
+              src={fileRawUrl(file.path)}
+              controls
+              preload="metadata"
+              className="max-h-full max-w-full"
+            />
+          </div>
+        ) : view === "rendered" && file.kind === "audio" ? (
+          <div className="flex min-h-full items-center justify-center p-6">
+            <audio
+              key={file.mtime}
+              src={fileRawUrl(file.path)}
+              controls
+              preload="metadata"
+              className="w-full max-w-xl"
+            />
+          </div>
         ) : file.kind === "image" ? (
           <div className="flex min-h-full items-center justify-center p-6">
             <img

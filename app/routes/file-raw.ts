@@ -4,7 +4,7 @@ import type { Route } from "./+types/file-raw";
 import { fileResponse, resolveFile, SANDBOX_BASE } from "~/lib/files.server";
 import { assertLocalHost, assertLocalRead } from "~/lib/guard.server";
 
-// A file's bytes, for the viewer's images and its rendered-HTML frame. The
+// A file's bytes, for the viewer's images, players and rendered-HTML frame. The
 // path is the URL's own, `/file/raw/Users/…`, so relative links inside an
 // HTML file resolve beside it. The same file under SANDBOX_BASE is for that
 // frame, whose requests arrive cross-site.
@@ -29,5 +29,5 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!found || !found.stats.isFile()) {
     throw data("Not found", { status: 404 });
   }
-  return fileResponse(found);
+  return fileResponse(found, { range: request.headers.get("range") });
 }

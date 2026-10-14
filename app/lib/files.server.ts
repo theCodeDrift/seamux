@@ -38,9 +38,29 @@ const TYPES: Record<string, string> = {
   ".pdf": "application/pdf",
   ".woff": "font/woff",
   ".woff2": "font/woff2",
+  ".mp4": "video/mp4",
+  ".m4v": "video/mp4",
+  ".mov": "video/quicktime",
+  ".webm": "video/webm",
+  ".ogv": "video/ogg",
+  ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+  ".aac": "audio/aac",
+  ".wav": "audio/wav",
+  ".flac": "audio/flac",
+  ".ogg": "audio/ogg",
+  ".oga": "audio/ogg",
+  ".opus": "audio/ogg",
 };
 
-export type FileKind = "markdown" | "html" | "image" | "text" | "binary";
+export type FileKind =
+  | "markdown"
+  | "html"
+  | "image"
+  | "video"
+  | "audio"
+  | "text"
+  | "binary";
 
 export type FileEntry =
   | {
@@ -120,6 +140,8 @@ function kindOf(path: string, sample: Buffer): FileKind {
   if (type.startsWith("text/markdown")) return "markdown";
   if (type.startsWith("text/html")) return "html";
   if (type.startsWith("image/")) return "image";
+  if (type.startsWith("video/")) return "video";
+  if (type.startsWith("audio/")) return "audio";
   if (
     type.startsWith("text/") ||
     type.startsWith("application/json") ||
@@ -133,14 +155,17 @@ function kindOf(path: string, sample: Buffer): FileKind {
 // A file's bytes, sandboxed: an HTML file opened from here, framed or not,
 // runs in an opaque origin and cannot act as the board. Its links may still
 // download, such as a report's exported CSV. `download` asks the browser to
-// save the file under its own name instead of showing it.
+// save the file under its own name instead of showing it. `range`, a
+// request's Range header, sends just those bytes: a video or audio player
+// asks for them to seek, and Safari won't play a video without them.
 export async function fileResponse(
   found: { path: string; stats: Stats },
-  { download = false } = {},
+  { download = false, range = null as string | null } = {},
 ): Promise<Response> {
+  const size = found.stats.size;
   const headers = new Headers({
     "Content-Type": contentType(found.path, await readHead(found.path, 8000)),
-    "Content-Length": String(found.stats.size),
+    "Accept-Ranges": "bytes",
     "Content-Security-Policy": "sandbox allow-scripts allow-popups allow-downloads",
     "X-Content-Type-Options": "nosniff",
     "Cache-Control": "no-store",
@@ -152,8 +177,43 @@ export async function fileResponse(
       `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
     );
   }
+  const span = range === null ? null : byteRange(range, size);
+  if (span === "unsatisfiable") {
+    headers.set("Content-Range", `bytes */${size}`);
+    return new Response(null, { status: 416, headers });
+  }
+  if (span) {
+    headers.set("Content-Range", `bytes ${span.start}-${span.end}/${size}`);
+    headers.set("Content-Length", String(span.end - span.start + 1));
+    const body = Readable.toWeb(
+      createReadStream(found.path, span),
+    ) as ReadableStream;
+    return new Response(body, { status: 206, headers });
+  }
+  headers.set("Content-Length", String(size));
   const body = Readable.toWeb(createReadStream(found.path)) as ReadableStream;
   return new Response(body, { headers });
+}
+
+// A Range header's one span, inclusive, within a file of `size` bytes:
+// `bytes=0-`, `bytes=100-199` or the last 500, `bytes=-500`. Null for
+// anything else, several spans included, which gets the whole file.
+export function byteRange(
+  header: string,
+  size: number,
+): { start: number; end: number } | "unsatisfiable" | null {
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m || (m[1] === "" && m[2] === "")) return null;
+  if (m[1] === "") {
+    const last = Number(m[2]);
+    if (last === 0 || size === 0) return "unsatisfiable";
+    return { start: Math.max(0, size - last), end: size - 1 };
+  }
+  const start = Number(m[1]);
+  if (start >= size) return "unsatisfiable";
+  const end = m[2] === "" ? size - 1 : Math.min(Number(m[2]), size - 1);
+  if (end < start) return null;
+  return { start, end };
 }
 
 export async function readHead(path: string, bytes: number): Promise<Buffer> {

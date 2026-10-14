@@ -15,5 +15,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!found || !found.stats.isFile()) {
     throw data("Not found", { status: 404 });
   }
-  return fileResponse(found, { download: true });
+  return fileResponse(found, {
+    download: true,
+    range: request.headers.get("range"),
+  });
 }
