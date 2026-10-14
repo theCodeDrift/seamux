@@ -31,6 +31,7 @@ import {
   sendMessage,
   takeDraft,
   UnsentError,
+  worktreeId,
 } from "~/lib/drive.server";
 import {
   HARNESSES,
@@ -985,5 +986,13 @@ describe("resume", () => {
     const live = (await listLive()).get("codex-old");
     expect(live).toMatchObject({ engine: "codex" });
     expect(live!.surface.surfaceId).toBe(created.surfaces[0].id);
+  });
+});
+
+describe("worktreeId", () => {
+  it("is four lowercase letters and digits, different each time", () => {
+    const ids = Array.from({ length: 50 }, worktreeId);
+    for (const id of ids) expect(id).toMatch(/^[a-z0-9]{4}$/);
+    expect(new Set(ids).size).toBeGreaterThan(45);
   });
 });

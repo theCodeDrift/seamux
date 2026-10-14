@@ -3,7 +3,7 @@
 // through cmux. None of them destroys anything.
 
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
@@ -982,6 +982,13 @@ export function nameFrom(prompt: string): string {
 
 const WORKTREE_NAME = /^[a-z0-9][a-z0-9._/-]{0,60}$/;
 
+// What tells two worktrees with the same words apart: four lowercase
+// letters and digits, as git and a directory both take them.
+export function worktreeId(): string {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+  return [...randomBytes(4)].map((b) => alphabet[b % 36]).join("");
+}
+
 interface Worktree {
   path: string;
   branch: string;
@@ -992,7 +999,7 @@ interface Worktree {
 }
 
 interface NewWorktree extends Worktree {
-  // What went on the end of the name asked for to make it free.
+  // The id that went on the end of the name asked for.
   suffix: string;
 }
 
@@ -1048,13 +1055,14 @@ function openingMacros(name: string, cwd: string, wt: Worktree | null) {
 // itself a worktree, so worktrees never nest: under .claude/worktrees if
 // that exists, else worktrees/.
 //
-// The same prompt gives the same name, so a name whose worktree or branch
-// already exists, or that nameTaken says is taken elsewhere, gets the next
-// free number on the end.
+// The same opening words give the same name, so a short random id goes on
+// the end: a name is never handed out twice, even once its worktree and
+// branch are gone, so a later chat can't take an earlier one's branch, on
+// GitHub or anywhere else. An id whose worktree or branch is somehow there
+// already is drawn again.
 async function createWorktree(
   cwd: string,
   name: string,
-  nameTaken: (suffix: string) => boolean,
 ): Promise<NewWorktree> {
   let list: string;
   try {
@@ -1087,9 +1095,9 @@ async function createWorktree(
       () => true,
       () => false,
     ));
-  const suffix = await freeSuffix(
-    async (s) => nameTaken(s) || (await taken(name + s)),
-  );
+  let suffix: string;
+  do suffix = `-${worktreeId()}`;
+  while (await taken(name + suffix));
   const path = join(home, name + suffix);
   const branch = `worktree-${name}${suffix}`;
   // HEAD as the chosen checkout sees it, not the main checkout's.
@@ -1145,13 +1153,9 @@ export async function dispatch(input: DispatchInput): Promise<string> {
   }
 
   const engine = input.engine ?? "claude";
-  // One number makes the session's name, its cmux workspace's and its
-  // worktree's all free, so they read the same.
   const inUse = await namesInUse();
-  const nameTaken = (suffix: string) => inUse.has(asked + suffix);
-  const wt = worktree ? await createWorktree(cwd, worktree, nameTaken) : null;
-  const suffix = wt ? wt.suffix : await freeSuffix(nameTaken);
-  const name = asked + suffix;
+  const wt = worktree ? await createWorktree(cwd, worktree) : null;
+  const name = asked + (await freeSuffix((s) => inUse.has(asked + s)));
   const where = wt?.path ?? cwd;
   // The session gets the prompt inside the new-session macro; the card
   // shows what was typed.
