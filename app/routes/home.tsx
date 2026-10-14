@@ -29,6 +29,7 @@ import {
   PinOff,
   Play,
   Plus,
+  RotateCw,
   SendHorizontal,
   Square,
   Trash2,
@@ -654,7 +655,12 @@ function ChatInput({
         error={error ?? forker.error}
         onFork={ENGINE_FEATURES[card.engine].fork ? fork : null}
         forking={forker.pending}
-        title={<SessionName card={card} inModal />}
+        title={
+          <>
+            <SessionName card={card} inModal />
+            <MoreActions card={card} className="ml-auto" />
+          </>
+        }
       />
     </div>
   );
@@ -1097,6 +1103,65 @@ function PinToggle({ card }: { card: BoardCard }) {
   );
 }
 
+// What a chat needs only now and then, kept behind "..." so the header
+// stays to what is used every day. Not on a closed chat: it has nothing to
+// act on.
+function MoreActions({
+  card,
+  className,
+}: {
+  card: BoardCard;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const { submit, pending, error } = useSessionAction(card.sessionId);
+  useReportError("more", error);
+  if (card.column === "done") return null;
+  const reloadBlocked = !card.drivable
+    ? "Not in a cmux surface"
+    : !closable(card)
+      ? "Only an idle chat can be reloaded"
+      : card.closing?.state === "cleaning"
+        ? "Closing"
+        : null;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        aria-label="More actions"
+        title="More actions"
+        render={
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            className={className}
+            disabled={pending}
+          />
+        }
+      >
+        <Ellipsis />
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 gap-0.5 p-1.5">
+        <button
+          type="button"
+          disabled={reloadBlocked !== null}
+          title={
+            reloadBlocked ??
+            "Exit and resume this conversation in a new workspace, so it picks up a new MCP server or changed settings"
+          }
+          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => {
+            setOpen(false);
+            submit("reload");
+          }}
+        >
+          <RotateCw className="size-4" />
+          Reload conversation
+        </button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // Folds a card to its title, for a chat worth keeping in view but not now,
 // or opens it back up. Kept in this browser only, like the board's other
 // view preferences.
@@ -1262,6 +1327,7 @@ function SessionCard({ card, now }: { card: BoardCard; now: number }) {
                 setMinimized={setMinimized}
               />
               <CardControl card={card} />
+              <MoreActions card={card} />
             </span>
           </CardTitle>
           {!minimized && (

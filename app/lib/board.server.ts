@@ -47,6 +47,7 @@ import {
   readCodexApproval,
   readDialog,
   readDraft,
+  restarting,
   type LiveSession,
   type Surface,
 } from "./drive.server";
@@ -1027,7 +1028,12 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
   // In the order the user dragged them into.
   let pinRows: PinRow[] = [];
   try {
-    pinRows = settlePins(agents, closed, liveKnown);
+    // A chat reloading is gone only until it comes back.
+    pinRows = settlePins(
+      agents,
+      (id) => closed(id) && !restarting(id),
+      liveKnown,
+    );
   } catch (err) {
     warnings.push(`Pin store unavailable: ${(err as Error).message}`);
   }

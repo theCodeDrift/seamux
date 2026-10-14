@@ -9,6 +9,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { Card } from "~/lib/board";
 import { ENGINE_FEATURES, ENGINES } from "~/lib/config";
 import {
   answerApproval,
@@ -21,7 +22,9 @@ import {
   listLive,
   readDialog,
   readDraft,
+  reload,
   renameLive,
+  restarting,
   resume,
   resumeTurn,
   sendDraft,
@@ -172,10 +175,28 @@ describe("promptBoxDraft", () => {
     const grid: ReplayGrid = {
       columns: 30,
       row_spans: [
-        { row: 0, column: 0, text: "─".repeat(30), cell_width: 30, style_id: 0 },
+        {
+          row: 0,
+          column: 0,
+          text: "─".repeat(30),
+          cell_width: 30,
+          style_id: 0,
+        },
         { row: 1, column: 0, text: "❯ ", cell_width: 2, style_id: 0 },
-        { row: 1, column: 2, text: "go ahead with 1-3", cell_width: 17, style_id: 1 },
-        { row: 2, column: 0, text: "─".repeat(30), cell_width: 30, style_id: 0 },
+        {
+          row: 1,
+          column: 2,
+          text: "go ahead with 1-3",
+          cell_width: 17,
+          style_id: 1,
+        },
+        {
+          row: 2,
+          column: 0,
+          text: "─".repeat(30),
+          cell_width: 30,
+          style_id: 0,
+        },
       ],
       styles: [
         { id: 0, faint: false },
@@ -188,13 +209,17 @@ describe("promptBoxDraft", () => {
   it("reads nothing from an empty box, one in shell mode, or a screen without one", () => {
     expect(promptBoxDraft(box("❯"))).toBeNull();
     expect(promptBoxDraft(box("! ls"))).toBeNull();
-    expect(promptBoxDraft(plainGrid(" Do you want to proceed?\n ❯ 1. Yes"))).toBeNull();
+    expect(
+      promptBoxDraft(plainGrid(" Do you want to proceed?\n ❯ 1. Yes")),
+    ).toBeNull();
   });
 });
 
 describe("unsent drafts", () => {
   const promptBox = (text: string) =>
-    ["⏺ ok", "─".repeat(40), `❯ ${text}`, "─".repeat(40), "  footer"].join("\n");
+    ["⏺ ok", "─".repeat(40), `❯ ${text}`, "─".repeat(40), "  footer"].join(
+      "\n",
+    );
   // A box that empties on Enter or once its lines are deleted.
   const emptying = (s: FakeSurface, i: { kind: string; value: string }) => {
     if (i.value === "enter" || i.value === "\r" || i.value === "\x15")
@@ -763,6 +788,35 @@ describe("closeChat", () => {
     await closeChat("s");
     expect(cmux.calls("workspace.close")).toEqual([]);
     expect(cmux.calls("surface.close")).toEqual([]);
+  });
+});
+
+describe("reload", () => {
+  it("exits the chat, then resumes its conversation in a new workspace", async () => {
+    const { surface, workspace } = cmux.addSession("s");
+    cmux.onInput((_, i) => {
+      if (i.kind === "key" && surface.input.at(-2)?.value === "/exit")
+        cmux.endSession("s");
+    });
+    const card = {
+      sessionId: "s",
+      cwd: "/tmp",
+      name: "investor work",
+      engine: "claude",
+    } as Card;
+    const reloaded = reload(card);
+    // Closed for now, but coming back: its pin stays.
+    expect(restarting("s")).toBe(true);
+    await reloaded;
+    expect(input(surface)).toEqual(["paste:/exit", "key:enter"]);
+    expect(cmux.workspaces).not.toContain(workspace);
+    const [create] = cmux.calls("workspace.create");
+    expect(create.params).toMatchObject({
+      cwd: "/tmp",
+      title: "investor work",
+    });
+    expect(String(create.params.initial_command)).toContain("--resume");
+    expect(restarting("s")).toBe(true);
   });
 });
 

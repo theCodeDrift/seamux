@@ -782,6 +782,32 @@ export async function resume(
   }
 }
 
+// Restarts a chat on its own conversation, so it reads afresh what it only
+// reads at start: a new MCP server, a changed setting, an updated harness.
+// It exits as a close does, but without the close-session macro, since the
+// chat is coming straight back, and resumes in a new workspace.
+const reloading = new Set<string>();
+
+export async function reload(card: Card) {
+  const { sessionId } = card;
+  if (reloading.has(sessionId)) throw new Error("Already reloading this chat");
+  reloading.add(sessionId);
+  try {
+    await closeChat(sessionId);
+    await resume(sessionId, card.cwd, card.name, card.engine);
+  } finally {
+    reloading.delete(sessionId);
+  }
+}
+
+// A chat between exiting and coming back from a reload or a resume: closed
+// for now, but not to be treated as gone, so it keeps its pin.
+export function restarting(sessionId: string): boolean {
+  if (reloading.has(sessionId)) return true;
+  const started = resuming.get(sessionId);
+  return started !== undefined && Date.now() - started < RESUME_GUARD_MS;
+}
+
 // An open chat renames itself with `/rename`, which Codex takes too, and
 // which also retitles its tab.
 // cmux's workspace title is its own, so it is set too, but only when the

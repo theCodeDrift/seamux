@@ -13,6 +13,7 @@ type Intent =
   | "delete"
   | "fork"
   | "close"
+  | "reload"
   | "pin"
   | "unpin"
   | "pin-move"

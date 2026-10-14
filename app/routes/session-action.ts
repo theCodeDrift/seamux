@@ -16,6 +16,7 @@ import {
   fork,
   interrupt,
   renameClosed,
+  reload,
   renameLive,
   resume,
   sendDraft,
@@ -43,6 +44,7 @@ const INTENTS = new Set([
   "delete",
   "fork",
   "close",
+  "reload",
   "pin",
   "unpin",
   "pin-move",
@@ -177,6 +179,16 @@ async function perform(
     await closeSession(card, cards, async () =>
       (await loadBoard()).cards.find((c) => c.sessionId === sessionId),
     );
+  } else if (intent === "reload") {
+    // Only a chat at rest, as for a close: exiting cuts a turn off.
+    const card = (await loadBoard()).cards.find(
+      (c) => c.sessionId === sessionId,
+    );
+    if (!card || !closable(card)) {
+      throw new Error("Only idle chats can be reloaded");
+    }
+    if (!card.drivable) throw new Error("Not in a cmux surface");
+    await reload(card);
   } else if (intent === "answer") {
     // Only the question still open: keys sent after it closed would land
     // in the prompt box instead.
