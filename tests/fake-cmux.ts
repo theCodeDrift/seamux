@@ -59,6 +59,8 @@ export interface FakeSession {
   active_for_surface: boolean;
   // null when cmux's record has lost the session's pid.
   stored_pid_exists: boolean | null;
+  launch_arguments?: string[];
+  stored_pid_arguments?: string[];
   surface_id: string;
   workspace_id: string;
   cwd?: string;

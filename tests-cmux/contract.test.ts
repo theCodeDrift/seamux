@@ -261,6 +261,14 @@ describe("the cmux command", () => {
       expect(s.stored_pid_exists).toSatisfy(
         (v: unknown) => v === null || typeof v === "boolean",
       );
+      // What a stored pid runs now, to tell a pid handed on to another
+      // process from the session's own.
+      for (const key of ["launch_arguments", "stored_pid_arguments"]) {
+        expect(s[key] ?? []).toSatisfy(
+          (v: unknown) =>
+            Array.isArray(v) && v.every((a) => typeof a === "string"),
+        );
+      }
       expect(s.transcript_path ?? null).toSatisfy(
         (v: unknown) => v === null || typeof v === "string",
       );

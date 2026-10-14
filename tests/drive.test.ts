@@ -85,11 +85,26 @@ describe("listLive", () => {
     });
     cmux.addSession("claude-inactive", { active_for_surface: false });
     cmux.addSession("claude-dead", { stored_pid_exists: false });
+    // Its pid handed on to another process after it exited.
+    cmux.addSession("codex-pid-reused", {
+      agent: "codex",
+      active_for_surface: false,
+      launch_arguments: ["/opt/homebrew/bin/codex", "-a", "on-request"],
+      stored_pid_arguments: ["/usr/libexec/geod"],
+    });
+    cmux.addSession("claude-node", {
+      launch_arguments: ["/opt/homebrew/bin/claude"],
+      stored_pid_arguments: ["node", "/opt/homebrew/bin/claude", "--resume"],
+    });
     cmux.addSession("amp-live", { agent: "amp" });
 
     const live = await listLive();
 
-    expect([...live.keys()].sort()).toEqual(["claude-live", "codex-live"]);
+    expect([...live.keys()].sort()).toEqual([
+      "claude-live",
+      "claude-node",
+      "codex-live",
+    ]);
     expect(live.get("claude-live")).toEqual({
       engine: "claude",
       surface: {

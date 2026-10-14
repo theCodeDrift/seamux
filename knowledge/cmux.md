@@ -75,3 +75,11 @@ A live Claude Code session in a cmux surface can come back with `pid: null`, `st
 - **Measured:** cmux 0.64.23, Claude Code 2.1.286, on one dispatched session; what drops the pid is unknown.
 - **In seamux:** `listLive` and `runningClaudeSessions` in [drive.server.ts](../app/lib/drive.server.ts); the fake's `stored_pid_exists: null` in [tests/fake-cmux.ts](../tests/fake-cmux.ts), and the contract in [tests-cmux/contract.test.ts](../tests-cmux/contract.test.ts).
 - **See also:** [`active_for_surface` stays `false` for a live OpenCode session](opencode.md#active_for_surface-stays-false-for-a-live-opencode-session), where `stored_pid_exists` was never `null` and there is no `claude agents` to ask.
+
+## `cmux sessions list` takes a reused pid for a live session
+
+cmux decides `stored_pid_exists` by whether any process has the pid it stored, not whether that process is the session's. A Codex session whose workspace had been closed five days earlier still came back with `stored_pid_exists: true`, because macOS had given its pid to `geodMachServiceBridge`. Its `launch_arguments` began `/opt/homebrew/bin/codex`, while its `stored_pid_arguments` held only the new process's path. The board kept its card live and sent every close to a workspace that no longer existed (`Workspace not found`). A live session's `stored_pid_arguments` is the command it was launched with: identical to `launch_arguments` for Codex, and starting with the same `claude` path for Claude Code. So seamux counts a session as dead when its stored pid's arguments are known and don't include its launch command's path. It doesn't ask `workspace.list` instead, because that lists only one window's workspaces (its reply carries a `window_id`).
+
+- **Measured:** cmux 0.64.23, Codex 0.157.1, Claude Code 2.1.296, on one dead Codex session and on a throwaway one started for the purpose.
+- **In seamux:** `pidReused` in `listLive` in [drive.server.ts](../app/lib/drive.server.ts); `launch_arguments` and `stored_pid_arguments` in [tests/fake-cmux.ts](../tests/fake-cmux.ts) and [tests-cmux/contract.test.ts](../tests-cmux/contract.test.ts).
+- **See also:** [`cmux sessions list` can lose a live Claude session's pid](#cmux-sessions-list-can-lose-a-live-claude-sessions-pid).

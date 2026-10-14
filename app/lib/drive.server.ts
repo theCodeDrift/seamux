@@ -60,6 +60,11 @@ interface CmuxSession {
   active_for_surface: boolean;
   // null when cmux's record of the session has lost its pid.
   stored_pid_exists: boolean | null;
+  // What the session was started with, and what the process now holding
+  // its stored pid runs. They differ once macOS gives a dead session's pid
+  // to another process.
+  launch_arguments?: string[];
+  stored_pid_arguments?: string[];
   surface_id: string;
   workspace_id: string;
   cwd?: string;
@@ -88,7 +93,9 @@ const resumedUnfiled = ((globalThis as any).__seamuxResumedUnfiled ??= new Map<
 // One cmux marks active for its surface is live while it has the mark;
 // one that never gets it, such as Codex, is live while its process is.
 // cmux sometimes loses a session's pid and can't tell, so the harness's
-// own list of running sessions decides those, where it has one.
+// own list of running sessions decides those, where it has one. Nor does
+// cmux notice a pid handed on to another process, so a stored pid running
+// something other than what the session was launched with is a dead one.
 export async function listLive(): Promise<Map<string, LiveSession>> {
   const stdout = await cmuxCli(["sessions", "list", "--json"], {
     maxBuffer: 16 * 1024 * 1024,
@@ -114,7 +121,7 @@ export async function listLive(): Promise<Map<string, LiveSession>> {
     if (harness.markedActive && !s.active_for_surface) continue;
     if (s.stored_pid_exists == null) {
       if (!harness.running || !running.has(s.session_id)) continue;
-    } else if (!s.stored_pid_exists) continue;
+    } else if (!s.stored_pid_exists || pidReused(s)) continue;
     map.set(s.session_id, {
       engine: harness.engine,
       surface: { surfaceId: s.surface_id, workspaceId: s.workspace_id },
@@ -141,6 +148,14 @@ export async function listLive(): Promise<Map<string, LiveSession>> {
     }
   }
   return map;
+}
+
+// The launch command's path among the process's arguments, rather than
+// first, so an agent run by an interpreter (`node …/claude`) still matches.
+function pidReused(s: CmuxSession): boolean {
+  const launched = s.launch_arguments?.[0];
+  const running = s.stored_pid_arguments ?? [];
+  return !!launched && running.length > 0 && !running.includes(launched);
 }
 
 // Whether a session still runs, told as the board tells a closed chat:
