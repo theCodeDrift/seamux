@@ -257,11 +257,13 @@ export default function FileViewer({ loaderData }: Route.ComponentProps) {
             />
           </div>
         ) : file.kind === "image" ? (
-          <div className="flex min-h-full items-center justify-center p-6">
+          // A frame the window's size, so the image's max-height has a
+          // height to resolve against: it shrinks to fit, never grows.
+          <div className="flex size-full items-center justify-center p-6">
             <img
               src={`${fileRawUrl(file.path)}?v=${file.mtime}`}
               alt={file.path}
-              className="max-h-full max-w-full"
+              className="max-h-full min-h-0 max-w-full min-w-0 object-contain"
             />
           </div>
         ) : file.text !== null ? (
