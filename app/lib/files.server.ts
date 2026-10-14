@@ -8,6 +8,8 @@ import { homedir } from "node:os";
 import { extname, join } from "node:path";
 import { Readable } from "node:stream";
 
+import { SANDBOX_FLAGS } from "./files.ts";
+
 // A rendered HTML page runs sandboxed, in an opaque origin, so its own
 // stylesheets and scripts arrive as cross-site requests with no Referer:
 // indistinguishable from another website's. They are let through by this
@@ -153,8 +155,10 @@ function kindOf(path: string, sample: Buffer): FileKind {
 }
 
 // A file's bytes, sandboxed: an HTML file opened from here, framed or not,
-// runs in an opaque origin and cannot act as the board. Its links may still
-// download, such as a report's exported CSV. `download` asks the browser to
+// runs in an opaque origin and cannot act as the board. A PDF is the one
+// exception, since Chrome refuses to show one in a sandboxed document, with
+// ERR_BLOCKED_BY_CLIENT, and its viewer runs no script in the board's
+// origin anyway. `download` asks the browser to
 // save the file under its own name instead of showing it. `range`, a
 // request's Range header, sends just those bytes: a video or audio player
 // asks for them to seek, and Safari won't play a video without them.
@@ -163,13 +167,16 @@ export async function fileResponse(
   { download = false, range = null as string | null } = {},
 ): Promise<Response> {
   const size = found.stats.size;
+  const type = contentType(found.path, await readHead(found.path, 8000));
   const headers = new Headers({
-    "Content-Type": contentType(found.path, await readHead(found.path, 8000)),
+    "Content-Type": type,
     "Accept-Ranges": "bytes",
-    "Content-Security-Policy": "sandbox allow-scripts allow-popups allow-downloads",
     "X-Content-Type-Options": "nosniff",
     "Cache-Control": "no-store",
   });
+  if (type !== "application/pdf") {
+    headers.set("Content-Security-Policy", `sandbox ${SANDBOX_FLAGS}`);
+  }
   if (download) {
     const name = found.path.split("/").pop() ?? "file";
     headers.set(

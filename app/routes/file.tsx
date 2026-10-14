@@ -21,6 +21,7 @@ import {
   fileDownloadUrl,
   fileRawUrl,
   fileViewerUrl,
+  SANDBOX_FLAGS,
   type FileView,
 } from "~/lib/files";
 import { loadFile, SANDBOX_BASE } from "~/lib/files.server";
@@ -221,14 +222,12 @@ export default function FileViewer({ loaderData }: Route.ComponentProps) {
             <Markdown base={dirnameOf(file.path)}>{file.text ?? ""}</Markdown>
           </article>
         ) : view === "rendered" && file.kind === "html" ? (
-          // Scripts run, but in an opaque origin: the page can't read the
-          // board, call its actions, or reach this window. Its links may
-          // still download, such as a report's exported CSV.
+          // Scripts run, but in an opaque origin: see SANDBOX_FLAGS.
           <iframe
             key={file.mtime}
             title={file.path}
             src={fileRawUrl(file.path, sandboxBase)}
-            sandbox="allow-scripts allow-popups allow-downloads"
+            sandbox={SANDBOX_FLAGS}
             className="block size-full bg-white"
           />
         ) : view === "rendered" && file.kind === "video" ? (

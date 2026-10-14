@@ -67,6 +67,15 @@ export function fileDownloadUrl(path: string): string {
   return `/file/download?${new URLSearchParams({ path })}`;
 }
 
+// What a rendered HTML page may do, on the viewer's frame and on the bytes'
+// own Content-Security-Policy: run scripts, but in an opaque origin, which
+// can't read the board, call its actions, or reach this window. Its links
+// may still download, such as a report's exported CSV, and open a new tab,
+// which leaves the sandbox: Chrome won't show a PDF in a sandboxed tab, and
+// every HTML file seamux serves into it arrives sandboxed by its own header.
+export const SANDBOX_FLAGS =
+  "allow-scripts allow-popups allow-popups-to-escape-sandbox allow-downloads";
+
 // The file's bytes, at a URL whose path mirrors the file's, so that a
 // rendered page's relative `style.css` or `img/a.png` resolves beside it.
 // `base` is `/file/raw` for the board's own requests, or the viewer's

@@ -71,3 +71,10 @@ A loader returning `new Response(stream, { headers: { "Content-Type": "text/even
 
 - **Measured:** React Router 7.18.4, Vite 8.3.0, Chrome 154.0.8037.95, macOS 26.5.1.
 - **In seamux:** [theme-events.ts](../app/routes/theme-events.ts), and `useThemeSync` in [use-theme.ts](../app/lib/use-theme.ts).
+
+## Chrome won't show a PDF in a sandboxed document, and says `ERR_BLOCKED_BY_CLIENT`
+
+A rendered HTML page in the file viewer linked its exported PDF with `target="_blank"`. The new tab opened at the PDF's `/file/sandbox/…` URL and showed "This page has been blocked by Chrome" with `ERR_BLOCKED_BY_CLIENT`, the error an ad blocker gives, though none was involved. Two things sandboxed that tab, and either one blocks Chrome's PDF viewer: a popup from a sandboxed frame inherits its sandbox unless the frame allows `allow-popups-to-escape-sandbox`, and the PDF's own `Content-Security-Policy: sandbox …` sandboxes it even when opened directly. So the viewer's frame lets popups leave the sandbox, which is safe because every HTML file seamux serves arrives sandboxed by its own header, and a PDF's bytes carry no sandbox header.
+
+- **Measured:** Chrome 155.0.8059.40 on macOS 26.5.1, from a real page on the tunnel; the fix not yet re-measured there.
+- **In seamux:** `SANDBOX_FLAGS` in [app/lib/files.ts](../app/lib/files.ts), on the viewer's frame in [app/routes/file.tsx](../app/routes/file.tsx), and `fileResponse` in [app/lib/files.server.ts](../app/lib/files.server.ts).

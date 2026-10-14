@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { fileDownloadUrl, fileRawUrl } from "~/lib/files";
+import { fileDownloadUrl, fileRawUrl, SANDBOX_FLAGS } from "~/lib/files";
 import { byteRange, loadFile } from "~/lib/files.server";
 import { loader as download } from "~/routes/file-download";
 import { loader as raw } from "~/routes/file-raw";
@@ -29,8 +29,16 @@ describe("file bytes", () => {
     expect(await response.text()).toBe("hello");
     expect(response.headers.get("content-disposition")).toBeNull();
     expect(response.headers.get("content-security-policy")).toBe(
-      "sandbox allow-scripts allow-popups allow-downloads",
+      `sandbox ${SANDBOX_FLAGS}`,
     );
+  });
+
+  it("leaves a PDF unsandboxed, which Chrome won't show otherwise", async () => {
+    const pdf = join(dir, "deck.pdf");
+    writeFileSync(pdf, "%PDF-1.7\n");
+    const response = await get(raw, fileRawUrl(pdf));
+    expect(response.headers.get("content-type")).toBe("application/pdf");
+    expect(response.headers.get("content-security-policy")).toBeNull();
   });
 
   it("asks the browser to save it from /file/download", async () => {
