@@ -906,6 +906,39 @@ describe("dispatch", () => {
     );
   });
 
+  // Codex draws its banner before the dialog, so the banner alone isn't
+  // a sign it's up.
+  it("answers Codex's trust dialog, which follows its banner", async () => {
+    const started = dispatch({ cwd: dir(), engine: "codex", prompt: "Hi" });
+    await vi.waitFor(() =>
+      expect(cmux.calls("workspace.create")).toHaveLength(1),
+    );
+    const workspace = cmux.workspaces.at(-1)!;
+    const created = workspace.surfaces[0];
+    created.screen =
+      ">_ OpenAI Codex (v0.157.1)\nmodel:     loading   /model to change";
+    await vi.waitFor(
+      () => expect(cmux.calls("surface.read_text")).not.toEqual([]),
+      { timeout: 5_000 },
+    );
+    created.screen =
+      "Trust this folder? Codex can read, edit, and run files here\n› 1. Trust and continue\n  2. Quit";
+    // Its default is "Trust and continue".
+    await vi.waitFor(() => expect(input(created)).toEqual(["key:enter"]), {
+      timeout: 5_000,
+    });
+    cmux.sessions.push({
+      session_id: "codex-trusted",
+      agent: "codex",
+      active_for_surface: false,
+      stored_pid_exists: true,
+      surface_id: created.id,
+      workspace_id: workspace.id,
+    });
+    cmux.writeSessions();
+    expect(await started).toBe("codex-trusted");
+  });
+
   it("refuses an empty prompt before reaching cmux", async () => {
     await expect(dispatch({ cwd: dir(), prompt: "  " })).rejects.toThrow(
       "Say what the new session should do",

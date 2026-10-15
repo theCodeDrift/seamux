@@ -24,8 +24,10 @@ A pnpm-managed Node puts it in `~/Library/pnpm/nodejs/<version>/bin`, next to `n
 
 A new folder asks "Trust this folder?" with "1. Trust and continue" selected, so Enter accepts it. The decision is saved, and a resume in the same folder does not ask again.
 
-- **Measured:** Codex 0.156.1, cmux 0.64.23.
-- **In seamux:** Codex's `trust` in [harness.server.ts](../app/lib/harness.server.ts), used by `acceptTrust` in [macros.server.ts](../app/lib/macros.server.ts).
+The "OpenAI Codex" banner draws first, with `model: loading`, and the dialog replaces it a few seconds later, so the banner is no sign Codex is past the dialog: watching for it stopped seamux answering, and the chat sat on the dialog, shown on the board as working. The model's name replaces "loading" only once the folder is trusted.
+
+- **Measured:** Codex 0.156.1 and 0.157.1, cmux 0.64.23.
+- **In seamux:** Codex's `trust` and `ready` in [harness.server.ts](../app/lib/harness.server.ts), used by `acceptTrust` in [macros.server.ts](../app/lib/macros.server.ts).
 - **See also:** [A new folder stops on a trust dialog that nothing reports](launching.md#a-new-folder-stops-on-a-trust-dialog-that-nothing-reports), Claude Code's, which defaults to no.
 
 ## A prompt given at launch waits for the trust dialog

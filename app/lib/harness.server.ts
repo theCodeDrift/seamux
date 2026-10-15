@@ -46,11 +46,12 @@ export interface Harness {
   // What approves a permission prompt.
   approveKey: string;
   // Launching it: the agent, cmux's wrapper for it, the dialog a new folder
-  // opens on and the keys that trust it, and what shows once it is up.
+  // opens on and the keys that trust it, and what shows once it is up and
+  // past that dialog.
   bin: string;
   wrapper: string;
   trust: { prompt: string; keys: string[] };
-  ready: string;
+  ready: RegExp;
   resumeArgs: (sessionId: string) => string[];
   // What gives a new chat the session id seamux picked, and its name.
   // Without it the harness picks its own id, which seamux learns once cmux
@@ -102,7 +103,7 @@ export const HARNESSES: Record<Engine, Harness> = {
     wrapper: join(CMUX_BIN, "cmux-claude-wrapper"),
     // Its default is "No, exit", so Enter alone would refuse.
     trust: { prompt: "Yes, I trust this folder", keys: ["down", "enter"] },
-    ready: "Claude Code v",
+    ready: /Claude Code v/,
     resumeArgs: (id) => ["--resume", id],
     identify: (id, name) => ["--session-id", id, "--name", name],
     fork: (parent, id, name) => [
@@ -134,7 +135,9 @@ export const HARNESSES: Record<Engine, Harness> = {
     wrapper: join(CMUX_BIN, "cmux-codex-wrapper"),
     // Its default is "Trust and continue".
     trust: { prompt: "Trust this folder?", keys: ["enter"] },
-    ready: "OpenAI Codex",
+    // Its banner draws before the dialog, with the model still "loading",
+    // and names the model only once the folder is trusted.
+    ready: /model:\s+(?!loading\b)\S/,
     resumeArgs: (id) => ["resume", id],
     // Codex has no --session-id or --name: it picks its id, and titles the
     // session itself after the first turn.

@@ -189,6 +189,6 @@ export async function acceptTrust(s: Session) {
       }
       return;
     }
-    if (screen.includes(ready)) return;
+    if (ready.test(screen)) return;
   }
 }
