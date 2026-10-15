@@ -1689,7 +1689,8 @@ function DropLine({ edge }: { edge: "top" | "bottom" }) {
 }
 
 // Pinned sits left of the state columns; its cards show their state as a dot.
-// Attention sits left of Pinned, while a service needs looking at.
+// Attention spans the board above them, while a service needs looking at: its
+// notices push the columns down rather than taking one of their places.
 type BoardColumnKey = Column | "pinned" | "attention";
 
 const PINNED_ACCENT = "bg-column-pinned";
@@ -1719,6 +1720,7 @@ function BoardColumn({
   notices = [],
   now,
   className,
+  noticeCols,
 }: {
   column: BoardColumnKey;
   cards: BoardCard[];
@@ -1726,6 +1728,8 @@ function BoardColumn({
   notices?: Board["attention"];
   now: number;
   className?: string;
+  // From md, Attention lays its notices out on the columns' grid below it.
+  noticeCols?: string;
 }) {
   const label = columnLabel(column);
   const count =
@@ -1766,7 +1770,14 @@ function BoardColumn({
         )}
       </h2>
       {column === "attention" ? (
-        <AttentionCards notices={notices} />
+        <div
+          className={cn(
+            "flex flex-col gap-3 md:grid md:grid-cols-2 md:gap-4",
+            noticeCols,
+          )}
+        >
+          <AttentionCards notices={notices} />
+        </div>
       ) : column === "pinned" ? (
         <PinnedCards cards={cards} now={now} />
       ) : (
@@ -2071,17 +2082,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   useDoneToasts(cards);
   useSendFailureToasts(cards);
   useServiceAlerts(board.attention, notifications.enabled);
-  // Attention only takes a column while a service needs looking at, and
-  // Pinned only while something is pinned.
+  // Attention only shows while a service needs looking at, and Pinned only
+  // takes a column while something is pinned.
   const attention = board.attention.filter(showsCard);
   const pinned = cards.filter((c) => c.pinned);
   // Done is hidden until asked for, and the choice outlives the tab.
   const [showDone, setShowDone] = useLocalStorage("seamux:show-done", false);
   const columns = COLUMNS.filter((c) => showDone || c !== "done");
-  const columnCount =
-    columns.length +
-    (pinned.length > 0 ? 1 : 0) +
-    (attention.length > 0 ? 1 : 0);
+  const columnCount = columns.length + (pinned.length > 0 ? 1 : 0);
   const byColumn = (column: Column) =>
     cards.filter((c) => !c.pinned && c.column === column);
   // Below md every column shows, Done included: each has a screen of its own.
@@ -2338,6 +2346,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                     cards={[]}
                     notices={attention}
                     now={now}
+                    className="md:col-span-full"
+                    noticeCols={XL_GRID_COLS[columnCount]}
                   />
                 )}
                 {pinned.length > 0 && (

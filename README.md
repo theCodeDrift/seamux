@@ -42,7 +42,7 @@ The store at `data/seamux.db`, in `~/.seamux` or a clone, holds only what those 
 
 | Column | Means |
 | --- | --- |
-| ATTENTION | A service, not a chat, that needs you: Claude Code or Codex signed out, or chats stopped on an expired login. Left of everything, and only there while something is wrong. It can't be pinned |
+| ATTENTION | A service, not a chat, that needs you: Claude Code or Codex signed out, or chats stopped on an expired login. Across the top of the board, above the columns and under the dispatch bar, and only there while something is wrong: its cards push the columns down. On a narrow screen it is the first column of the carousel. It can't be pinned |
 | PINNED | Sessions you've pinned as long-running. It keeps your order, which you change by dragging a card's name (with a mouse, not on a touch screen), and only appears while something is pinned. Closing a pinned session unpins it. `/clear` carries a chat on under a new session, so the pin moves to that one, in its place, and if you had the old chat open in full view the new one opens there |
 | IDLE | Alive, nothing to do |
 | WAITING | Stopped until you answer: a permission prompt, a question, any other dialog, or a turn that ended on a question, or that a background session reports left it blocked on you |
