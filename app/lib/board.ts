@@ -282,6 +282,13 @@ export type ChatMessage =
   | { role: "user" | "assistant"; text: string; at: string | null }
   // A system macro seamux sent, shown by its name rather than its text.
   | { role: "macro"; name: MacroName; at: string | null }
+  // The tools a reply called between its words, each by name with how many
+  // times, rather than what went in and came out.
+  | {
+      role: "tools";
+      calls: { name: string; count: number }[];
+      at: string | null;
+    }
   // A command the user ran in the chat with `!`. output is null while it
   // runs.
   | {
@@ -290,6 +297,10 @@ export type ChatMessage =
       output: string | null;
       at: string | null;
     };
+
+// The chat shows this many of a conversation's last messages, and this many
+// more each time it is asked for earlier ones.
+export const MESSAGES_SHOWN = 100;
 
 // A slash command a Claude Code chat accepts, for the inputs' autocomplete.
 export interface SlashCommand {

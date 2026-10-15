@@ -11,9 +11,11 @@ import { join } from "node:path";
 import type { ChatMessage, ContextUsage } from "./board.ts";
 import { configOrDefaults } from "./config.server.ts";
 import {
+  addToolCall,
   clip,
   endingQuestionIn,
   excerpt,
+  follow,
   promptExcerpt,
   readTail,
   replyExcerpt,
@@ -30,7 +32,8 @@ export interface CodexTranscript {
 }
 
 // Transcripts are sessions/YYYY/MM/DD/rollout-<time>-<session id>.jsonl.
-const ROLLOUT = /-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/;
+const ROLLOUT =
+  /-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/;
 
 // sessionId -> transcript, for every Codex session on disk.
 export async function indexCodexTranscripts(): Promise<
@@ -139,7 +142,11 @@ export interface CodexSummary {
   context: ContextUsage | null;
 }
 
-const CALLS = new Set(["custom_tool_call", "function_call", "local_shell_call"]);
+const CALLS = new Set([
+  "custom_tool_call",
+  "function_call",
+  "local_shell_call",
+]);
 const OUTPUTS = new Set([
   "custom_tool_call_output",
   "function_call_output",
@@ -233,33 +240,53 @@ export async function summarizeCodex(path: string): Promise<CodexSummary> {
   return s;
 }
 
-// The visible conversation, oldest first: prompts and replies, without
-// tool traffic or the context Codex injects.
+// The visible conversation, oldest first: prompts, replies, and the tools
+// called between them by name, without the context Codex injects.
 export async function loadCodexMessages(path: string): Promise<ChatMessage[]> {
-  const messages: ChatMessage[] = [];
   const { macros } = configOrDefaults();
-  for (const line of await readTail(path)) {
-    if (!line.includes('"item_completed"')) continue;
-    let o: any;
-    try {
-      o = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    const item = o.payload?.item;
-    const role =
-      item?.type === "UserMessage"
-        ? "user"
-        : item?.type === "AgentMessage"
-          ? "assistant"
-          : null;
-    const text = itemText(item)?.trim();
-    if (!role || !text) continue;
-    const at = o.timestamp ?? null;
-    if (role === "user") messages.push(...userTurn(text, at, macros));
-    else messages.push({ role, text: clip(text), at });
+  return follow<ChatMessage[]>(
+    path,
+    JSON.stringify(macros),
+    () => [],
+    (messages, line) => consumeCodexLine(messages, line, macros),
+  );
+}
+
+const CODEX_TOOL_CALL = new Set(["function_call", "custom_tool_call"]);
+
+function consumeCodexLine(
+  messages: ChatMessage[],
+  line: string,
+  macros: ReturnType<typeof configOrDefaults>["macros"],
+): void {
+  if (!line.includes('"item_completed"') && !line.includes('_call"')) return;
+  let o: any;
+  try {
+    o = JSON.parse(line);
+  } catch {
+    return;
   }
-  return messages;
+  const at = o.timestamp ?? null;
+  if (
+    o.type === "response_item" &&
+    CODEX_TOOL_CALL.has(o.payload?.type) &&
+    typeof o.payload.name === "string"
+  ) {
+    addToolCall(messages, o.payload.name, at);
+    return;
+  }
+  if (o.payload?.type !== "item_completed") return;
+  const item = o.payload.item;
+  const role =
+    item?.type === "UserMessage"
+      ? "user"
+      : item?.type === "AgentMessage"
+        ? "assistant"
+        : null;
+  const text = itemText(item)?.trim();
+  if (!role || !text) return;
+  if (role === "user") messages.push(...userTurn(text, at, macros));
+  else messages.push({ role, text: clip(text), at });
 }
 
 // An approval as Codex draws it, measured on a command approval:

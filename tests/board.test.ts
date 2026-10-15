@@ -3,6 +3,7 @@
 // installed, which seamux supports as much as Claude Code.
 
 import {
+  appendFileSync,
   copyFileSync,
   mkdirSync,
   mkdtempSync,
@@ -164,7 +165,7 @@ it("shows `!` commands, and what a backgrounded one wrote", async () => {
     ].join("\n") + "\n",
   );
 
-  const messages = await loadMessages(sessionId);
+  const messages = (await loadMessages(sessionId))?.messages;
   expect(messages).toEqual([
     {
       role: "shell",
@@ -221,9 +222,123 @@ it("shows a prompt command as typed, and leaves local commands out", async () =>
     ].join("\n") + "\n",
   );
 
-  expect(await loadMessages(sessionId)).toEqual([
+  expect((await loadMessages(sessionId))?.messages).toEqual([
     { role: "user", text: "/opsx:apply", at: "2026-01-01T00:00:01Z" },
     { role: "user", text: "/push now", at: "2026-01-01T00:00:02Z" },
+  ]);
+});
+
+it("shows a run of tool calls as one row of tool names between replies", async () => {
+  const sessionId = "6c2a9e14-7d3b-4f58-a1c6-0e9b8d7f2a31";
+  const project = join(process.env.HOME!, ".claude/projects/-work");
+  mkdirSync(project, { recursive: true });
+  const assistant = (content: unknown[], at: string) =>
+    JSON.stringify({
+      type: "assistant",
+      timestamp: at,
+      message: { role: "assistant", content },
+    });
+  const tool = (name: string) => ({
+    type: "tool_use",
+    id: name,
+    name,
+    input: {},
+  });
+  const result = JSON.stringify({
+    type: "user",
+    timestamp: "2026-01-01T00:00:02Z",
+    message: {
+      role: "user",
+      content: [
+        {
+          type: "tool_result",
+          tool_use_id: "Bash",
+          content: [{ type: "text", text: "output" }],
+        },
+      ],
+    },
+  });
+  writeFileSync(
+    join(project, `${sessionId}.jsonl`),
+    [
+      assistant([{ type: "text", text: "Looking." }], "2026-01-01T00:00:00Z"),
+      assistant([tool("Bash")], "2026-01-01T00:00:01Z"),
+      result,
+      assistant([{ type: "thinking", thinking: "hm" }], "2026-01-01T00:00:03Z"),
+      assistant([tool("Read"), tool("Bash")], "2026-01-01T00:00:04Z"),
+      assistant(
+        [tool("mcp__claude_ai_Linear__save_issue")],
+        "2026-01-01T00:00:05Z",
+      ),
+      assistant([{ type: "text", text: "Done." }], "2026-01-01T00:00:06Z"),
+    ].join("\n") + "\n",
+  );
+
+  expect((await loadMessages(sessionId))?.messages).toEqual([
+    { role: "assistant", text: "Looking.", at: "2026-01-01T00:00:00Z" },
+    {
+      role: "tools",
+      calls: [
+        { name: "Bash", count: 2 },
+        { name: "Read", count: 1 },
+        { name: "Linear save_issue", count: 1 },
+      ],
+      at: "2026-01-01T00:00:01Z",
+    },
+    { role: "assistant", text: "Done.", at: "2026-01-01T00:00:06Z" },
+  ]);
+});
+
+it("reads the whole of a long transcript, and then only what was added", async () => {
+  // Tool output once filled the last 2 MB the board read, so a chat showed
+  // three of its hundred messages.
+  const sessionId = "9e4b1f7a-2c8d-4a63-b5e0-7f1d3c9a6b42";
+  const project = join(process.env.HOME!, ".claude/projects/-work");
+  mkdirSync(project, { recursive: true });
+  const file = join(project, `${sessionId}.jsonl`);
+  const user = (content: unknown, at: string) =>
+    JSON.stringify({
+      type: "user",
+      timestamp: at,
+      message: { role: "user", content },
+    }) + "\n";
+  const big = [
+    {
+      type: "tool_result",
+      tool_use_id: "t",
+      content: "x".repeat(3 * 1024 * 1024),
+    },
+  ];
+  writeFileSync(
+    file,
+    user("First", "2026-01-01T00:00:00Z") +
+      user(big, "2026-01-01T00:00:01Z") +
+      user("Second", "2026-01-01T00:00:02Z"),
+  );
+  expect(await loadMessages(sessionId, 1)).toEqual({
+    messages: [{ role: "user", text: "Second", at: "2026-01-01T00:00:02Z" }],
+    total: 2,
+  });
+  expect((await loadMessages(sessionId))?.messages.map((m) => m.at)).toEqual([
+    "2026-01-01T00:00:00Z",
+    "2026-01-01T00:00:02Z",
+  ]);
+
+  // A line still being written waits until it ends.
+  const third = user("Third", "2026-01-01T00:00:03Z");
+  appendFileSync(file, third.slice(0, 20));
+  expect((await loadMessages(sessionId))?.total).toBe(2);
+  appendFileSync(file, third.slice(20));
+  expect((await loadMessages(sessionId))?.messages.at(-1)).toEqual({
+    role: "user",
+    text: "Third",
+    at: "2026-01-01T00:00:03Z",
+  });
+
+  // A transcript replaced by a shorter one is read again from its start.
+  writeFileSync(file, user("Only", "2026-01-01T00:00:04Z"));
+  expect((await loadMessages(sessionId))?.messages).toEqual([
+    { role: "user", text: "Only", at: "2026-01-01T00:00:04Z" },
   ]);
 });
 
@@ -462,7 +577,7 @@ it("shows a macro seamux sent before Session information by its name, after the 
     ].join("\n") + "\n",
   );
 
-  expect(await loadMessages(sessionId)).toEqual([
+  expect((await loadMessages(sessionId))?.messages).toEqual([
     { role: "user", text: "Fix the thing", at: "2026-01-01T00:00:00Z" },
     { role: "macro", name: "howToWorktree", at: "2026-01-01T00:00:00Z" },
     { role: "macro", name: "closeSession", at: "2026-01-01T00:01:00Z" },
@@ -491,7 +606,7 @@ it("shows the macros ahead of a first prompt by their names, then the prompt", a
     }) + "\n",
   );
 
-  expect(await loadMessages(sessionId)).toEqual([
+  expect((await loadMessages(sessionId))?.messages).toEqual([
     { role: "macro", name: "sessionInformation", at: "2026-01-01T00:00:00Z" },
     { role: "macro", name: "newSession", at: "2026-01-01T00:00:00Z" },
     { role: "user", text: "/gtd daily", at: "2026-01-01T00:00:00Z" },
@@ -515,7 +630,7 @@ it("shows a macro sent after a prompt command by its name", async () => {
     }) + "\n",
   );
 
-  expect(await loadMessages(sessionId)).toEqual([
+  expect((await loadMessages(sessionId))?.messages).toEqual([
     { role: "user", text: "/gtd daily", at: "2026-01-01T00:00:00Z" },
     { role: "macro", name: "howToWorktree", at: "2026-01-01T00:00:00Z" },
   ]);
@@ -558,7 +673,7 @@ it("shows a prompt sent while a turn ran, which Claude Code logs as a queued com
     ].join("\n") + "\n",
   );
 
-  expect(await loadMessages(sessionId)).toEqual([
+  expect((await loadMessages(sessionId))?.messages).toEqual([
     { role: "user", text: "Fix the thing", at: "2026-01-01T00:00:00Z" },
     { role: "user", text: "Also the other thing", at: "2026-01-01T00:00:10Z" },
     { role: "user", text: "[Image #1] and this", at: "2026-01-01T00:00:30Z" },

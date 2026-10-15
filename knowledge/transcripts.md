@@ -48,3 +48,10 @@ A slash command that prompts the model, such as a skill or `/opsx:apply`, is a u
 
 - **Measured:** Claude Code 2.1.295, across every transcript on this Mac.
 - **In seamux:** `promptCommand` in [board.server.ts](../app/lib/board.server.ts).
+
+## Tool output fills most of a transcript, and its last 2 MB can hold only a few messages
+
+Claude Code logs each tool's whole result in the transcript, along with attachments and file-history snapshots, so the conversation is a small part of it. In the largest transcript on this Mac, 132 MB, tool results were 57 MB, attachments 24 MB, tool calls 14 MB, and the replies' text 4 MB. 108 of its 473 transcripts were over 2 MB, and the last 2 MB of one 25.6 MB transcript held 3 of its 103 messages, which was all the chat showed when it read only that much. Reading a 132 MB transcript whole and parsing every line took about half a second, so the chat reads each transcript in full once and then only what was appended since.
+
+- **Measured:** Claude Code up to 2.1.301, across this Mac's transcripts from 2026-09-16 to 2026-10-15.
+- **In seamux:** `follow` in [transcript.server.ts](../app/lib/transcript.server.ts), and `loadClaudeMessages` in [board.server.ts](../app/lib/board.server.ts), which keeps a tool call to its name. A card's own state still reads the tail, with `readTail`.

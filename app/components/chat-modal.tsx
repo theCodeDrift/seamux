@@ -1,4 +1,11 @@
-import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useFetcher } from "react-router";
 import {
   Check,
@@ -32,7 +39,12 @@ import {
   MAX_ATTACHMENTS,
   type Attachment,
 } from "~/lib/attachments";
-import type { Card, ChatMessage, QueuedMessage } from "~/lib/board";
+import {
+  MESSAGES_SHOWN,
+  type Card,
+  type ChatMessage,
+  type QueuedMessage,
+} from "~/lib/board";
 import { ENGINE_FEATURES } from "~/lib/config";
 import { macroLabel } from "~/lib/macro-echo";
 import { queueEditsKey, scrollKey } from "~/lib/sweep";
@@ -91,8 +103,10 @@ export function ChatModal({
   const coarse = useCoarsePointer();
   const asking = card.waiting?.ask != null;
   const submitKey = useSubmitKey();
-  const fetcher = useFetcher<{ messages: ChatMessage[] }>();
-  const url = `/sessions/${card.sessionId}/messages`;
+  const fetcher = useFetcher<{ messages: ChatMessage[]; total: number }>();
+  // The last this-many messages, more each time earlier ones are asked for.
+  const [shown, setShown] = useState(MESSAGES_SHOWN);
+  const url = `/sessions/${card.sessionId}/messages?limit=${shown}`;
   // The dialog mounts its content a render or two after it opens, so the
   // scroller is state: effects that need it rerun once it exists.
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
@@ -130,6 +144,7 @@ export function ChatModal({
 
   const messages = fetcher.data?.messages;
   const count = messages?.length ?? 0;
+  const total = fetcher.data?.total ?? 0;
   useEffect(() => {
     if (!open || !scroller) return;
     if (messages && !restored.current) {
@@ -146,10 +161,24 @@ export function ChatModal({
       }
     }
     scroller.scrollTop = scroller.scrollHeight;
-    // Opening the chat, or a change in how many messages there are, moves the
-    // view to the end; nothing else should.
+    // Opening the chat, or a new message, moves the view to the end; nothing
+    // else should, earlier messages loading above least of all.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, scroller, count]);
+  }, [open, scroller, total]);
+
+  // Earlier messages load above what is on screen, which stays where it was:
+  // the same distance from the end once they're in.
+  const fromEnd = useRef<number | null>(null);
+  const showEarlier = () => {
+    if (fromEnd.current !== null) return;
+    if (scroller) fromEnd.current = scroller.scrollHeight - scroller.scrollTop;
+    setShown((n) => n + MESSAGES_SHOWN);
+  };
+  useLayoutEffect(() => {
+    if (!scroller || fromEnd.current === null) return;
+    scroller.scrollTop = scroller.scrollHeight - fromEnd.current;
+    fromEnd.current = null;
+  }, [scroller, count]);
 
   const input = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -225,6 +254,13 @@ export function ChatModal({
             )}
             {messages?.length === 0 && (
               <p className="text-muted-foreground">No messages yet.</p>
+            )}
+            {messages && total > count && (
+              <div className="mb-3 flex justify-center">
+                <Button variant="ghost" size="sm" onClick={showEarlier}>
+                  Show earlier messages
+                </Button>
+              </div>
             )}
             {messages && <Conversation messages={messages} cwd={card.cwd} />}
           </div>
@@ -554,10 +590,11 @@ function QueuedItem({
 }
 
 // The conversation, apart from the input so a keystroke there doesn't
-// render every message's markdown again. The replies a turn writes between
-// its tool calls arrive as messages of their own, so a run of them shares one
-// bubble and reads as the one response it is. A macro seamux sent shows by
-// its name, which says what it asked without the clutter of its text.
+// render every message's markdown again. A reply can arrive as several
+// messages, so a run of them shares one bubble and reads as the one response
+// it is. The tool calls between replies show as one line of tool names, and
+// a macro seamux sent by its name: each says what happened without the
+// clutter of what went in and came out.
 const Conversation = memo(function Conversation({
   messages,
   cwd,
@@ -581,6 +618,13 @@ const Conversation = memo(function Conversation({
           </div>
         ) : m.role === "shell" ? (
           <ShellRun key={`${m.at}-${i}`} run={m} />
+        ) : m.role === "tools" ? (
+          <div
+            key={`${m.at}-${i}`}
+            className="sensitive self-start rounded-full border px-3 py-1 text-xs text-muted-foreground max-md:text-sm"
+          >
+            💻 called {toolCalls(m.calls)}
+          </div>
         ) : m.role === "macro" ? (
           <div
             key={`${m.at}-${i}`}
@@ -602,6 +646,13 @@ const Conversation = memo(function Conversation({
 });
 
 type Reply = Extract<ChatMessage, { text: string }> & { role: "assistant" };
+
+// "Bash ×3, Read": each tool a run of calls used, and how often.
+function toolCalls(calls: { name: string; count: number }[]): string {
+  return calls
+    .map((c) => (c.count > 1 ? `${c.name} ×${c.count}` : c.name))
+    .join(", ");
+}
 
 // Gathers each run of consecutive replies into one array, leaving every
 // other message as it is.

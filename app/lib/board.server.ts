@@ -22,6 +22,7 @@ import {
   type CmuxTrouble,
   type Card,
   type ChatMessage,
+  MESSAGES_SHOWN,
   type Column,
   type ApiError,
   type ContextUsage,
@@ -61,9 +62,11 @@ import {
 import { dispatchStatus, listDispatches, type Alive } from "./protocol.server";
 import { serviceNotices } from "./service.server";
 import {
+  addToolCall,
   clip,
   endingQuestionIn,
   excerpt,
+  follow,
   MESSAGE_CHARS,
   readTail,
   promptExcerpt,
@@ -563,63 +566,103 @@ async function infoFrom(
     : null;
 }
 
+// The last `limit` messages of the visible conversation, oldest first, and
+// how many there are in all.
 export async function loadMessages(
   sessionId: string,
-  limit = 60,
-): Promise<ChatMessage[] | null> {
+  limit = MESSAGES_SHOWN,
+): Promise<{ messages: ChatMessage[]; total: number } | null> {
   const transcript = await findTranscript(sessionId);
   if (!transcript) return null;
-  return (await READERS[transcript.engine].messages(transcript.path)).slice(
-    -limit,
-  );
+  const all = await READERS[transcript.engine].messages(transcript.path);
+  return { messages: all.slice(-limit), total: all.length };
+}
+
+interface ClaudeConversation {
+  messages: ChatMessage[];
+  // A `!` command moved to the background goes on writing to its file, so
+  // what it printed is read again each time it is shown: run -> its stdout.
+  backgrounded: Map<ChatMessage, string>;
 }
 
 async function loadClaudeMessages(path: string): Promise<ChatMessage[]> {
-  const messages: ChatMessage[] = [];
   const { macros } = configOrDefaults();
-  for (const line of await readTail(path)) {
-    if (!line) continue;
-    let o: any;
-    try {
-      o = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (o.isSidechain) continue;
-    const midTurn = midTurnPrompt(o)?.trim();
-    if (midTurn) {
-      messages.push(
-        ...userTurn(unwrapPasted(midTurn), o.timestamp ?? null, macros),
-      );
-      continue;
-    }
-    if (o.type !== "user" && o.type !== "assistant") continue;
-    if (o.isMeta || o.isCompactSummary) continue;
-    const text = textOf(o.message?.content)?.trim();
-    if (!text) continue;
-    if (o.type === "user" && text.startsWith("<bash-input>")) {
-      messages.push({
-        role: "shell",
-        command: clip((tagged(text, "bash-input") ?? "").trim()),
-        output: null,
-        at: o.timestamp ?? null,
-      });
-      continue;
-    }
-    if (o.type === "user" && text.startsWith("<bash-stdout>")) {
-      const ran = messages.at(-1);
-      if (ran?.role === "shell" && ran.output === null)
-        ran.output = await shellOutput(text);
-      continue;
-    }
-    const command = o.type === "user" ? promptCommand(text) : null;
-    if (o.type === "user" && !command && SYNTHETIC_PROMPT.test(text)) continue;
-    const at = o.timestamp ?? null;
-    if (o.type === "user")
-      messages.push(...userTurn(command ?? unwrapPasted(text), at, macros));
-    else messages.push({ role: o.type, text: clip(text), at });
+  const chat = await follow<ClaudeConversation>(
+    path,
+    JSON.stringify(macros),
+    () => ({ messages: [], backgrounded: new Map() }),
+    (chat, line) => consumeClaudeLine(chat, line, macros),
+  );
+  if (chat.backgrounded.size === 0) return chat.messages;
+  return Promise.all(
+    chat.messages.map(async (m) => {
+      const stdout = chat.backgrounded.get(m);
+      return stdout === undefined
+        ? m
+        : { ...m, output: await shellOutput(stdout) };
+    }),
+  );
+}
+
+async function consumeClaudeLine(
+  { messages, backgrounded }: ClaudeConversation,
+  line: string,
+  macros: ReturnType<typeof configOrDefaults>["macros"],
+): Promise<void> {
+  let o: any;
+  try {
+    o = JSON.parse(line);
+  } catch {
+    return;
   }
-  return messages;
+  if (o.isSidechain) return;
+  const midTurn = midTurnPrompt(o)?.trim();
+  if (midTurn) {
+    messages.push(
+      ...userTurn(unwrapPasted(midTurn), o.timestamp ?? null, macros),
+    );
+    return;
+  }
+  if (o.type !== "user" && o.type !== "assistant") return;
+  if (o.isMeta || o.isCompactSummary) return;
+  const at = o.timestamp ?? null;
+  if (o.type === "assistant" && Array.isArray(o.message?.content)) {
+    for (const c of o.message.content) {
+      if (c?.type === "tool_use" && typeof c.name === "string")
+        addToolCall(messages, toolName(c.name), at);
+    }
+  }
+  const text = textOf(o.message?.content)?.trim();
+  if (!text) return;
+  if (o.type === "user" && text.startsWith("<bash-input>")) {
+    messages.push({
+      role: "shell",
+      command: clip((tagged(text, "bash-input") ?? "").trim()),
+      output: null,
+      at,
+    });
+    return;
+  }
+  if (o.type === "user" && text.startsWith("<bash-stdout>")) {
+    const ran = messages.at(-1);
+    if (ran?.role === "shell" && ran.output === null) {
+      ran.output = await shellOutput(text);
+      if (BACKGROUNDED.test(text)) backgrounded.set(ran, text);
+    }
+    return;
+  }
+  const command = o.type === "user" ? promptCommand(text) : null;
+  if (o.type === "user" && !command && SYNTHETIC_PROMPT.test(text)) return;
+  if (o.type === "user")
+    messages.push(...userTurn(command ?? unwrapPasted(text), at, macros));
+  else messages.push({ role: o.type, text: clip(text), at });
+}
+
+// An MCP tool by its server and name, "Linear save_issue", rather than
+// mcp__claude_ai_Linear__save_issue.
+function toolName(name: string): string {
+  const mcp = /^mcp__(?:claude_ai_)?(.+?)__(.+)$/.exec(name);
+  return mcp ? `${mcp[1].replace(/_/g, " ")} ${mcp[2]}` : name;
 }
 
 function tagged(text: string, tag: string): string | null {
