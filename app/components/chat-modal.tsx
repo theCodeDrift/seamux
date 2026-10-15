@@ -35,9 +35,10 @@ import {
 import type { Card, ChatMessage, QueuedMessage } from "~/lib/board";
 import { ENGINE_FEATURES } from "~/lib/config";
 import { macroLabel } from "~/lib/macro-echo";
-import { scrollKey } from "~/lib/sweep";
+import { queueEditsKey, scrollKey } from "~/lib/sweep";
 import { useCoarsePointer } from "~/lib/use-pointer";
 import { useSessionAction } from "~/lib/use-session-action";
+import { useSessionStorage } from "~/lib/use-session-storage";
 import { keyHint, useSubmitKey } from "~/lib/use-submit-key";
 import { cn } from "~/lib/utils";
 
@@ -390,11 +391,35 @@ export function ChatModal({
 
 // What waits for the chat's turn to end. Claude Code's own queue, typed in
 // the terminal, goes first and can only be read here; seamux's queue follows,
-// one message per turn, and can be edited, sent now, or removed.
+// one message per turn, and can be edited, sent now, or removed. An edit in
+// progress is kept in session storage, by message id, so a reload, such as
+// the board restarting after a landing, leaves it open with what was typed.
 function QueuedList({ card }: { card: Card }) {
+  const [edits, setEdits] = useSessionStorage<Record<string, string>>(
+    queueEditsKey(card.sessionId),
+    {},
+  );
+  // An edit outlives its message only until the list sees it gone: sent,
+  // removed, or taken by the queue.
+  const queued = card.boardQueue.map((m) => String(m.id)).join(",");
+  useEffect(() => {
+    const ids = new Set(queued.split(","));
+    setEdits((all) => {
+      const kept = Object.entries(all).filter(([id]) => ids.has(id));
+      return kept.length === Object.keys(all).length
+        ? all
+        : Object.fromEntries(kept);
+    });
+  }, [queued, edits, setEdits]);
+
   if (card.terminalQueue.length === 0 && card.boardQueue.length === 0) {
     return null;
   }
+  const setEdit = (id: string, text: string | null) =>
+    setEdits((all) => {
+      const { [id]: _, ...rest } = all;
+      return text === null ? rest : { ...rest, [id]: text };
+    });
   return (
     <section className="flex max-h-56 flex-col gap-1.5 overflow-y-auto">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -413,21 +438,37 @@ function QueuedList({ card }: { card: Card }) {
         </div>
       ))}
       {card.boardQueue.map((m) => (
-        <QueuedItem key={m.id} card={card} message={m} />
+        <QueuedItem
+          key={m.id}
+          card={card}
+          message={m}
+          text={edits[String(m.id)] ?? null}
+          setText={(text) => setEdit(String(m.id), text)}
+        />
       ))}
     </section>
   );
 }
 
-function QueuedItem({ card, message }: { card: Card; message: QueuedMessage }) {
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(message.text);
+// `text` is the edit in progress, null while the message isn't being edited.
+function QueuedItem({
+  card,
+  message,
+  text,
+  setText,
+}: {
+  card: Card;
+  message: QueuedMessage;
+  text: string | null;
+  setText: (text: string | null) => void;
+}) {
+  const editing = text !== null;
   const submitKey = useSubmitKey();
-  const edit = useSessionAction(card.sessionId, () => setEditing(false));
+  const edit = useSessionAction(card.sessionId, () => setText(null));
   const other = useSessionAction(card.sessionId);
   const id = String(message.id);
   const save = () =>
-    text.trim() && edit.submit("queue-edit", { id, text: text.trim() });
+    text?.trim() && edit.submit("queue-edit", { id, text: text.trim() });
   const error = edit.error ?? other.error;
 
   return (
@@ -436,7 +477,7 @@ function QueuedItem({ card, message }: { card: Card; message: QueuedMessage }) {
         {editing ? (
           <Textarea
             autoFocus
-            value={text}
+            value={text ?? ""}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -445,7 +486,7 @@ function QueuedItem({ card, message }: { card: Card; message: QueuedMessage }) {
               } else if (e.key === "Escape") {
                 // Cancel the edit, not the whole modal.
                 e.stopPropagation();
-                setEditing(false);
+                setText(null);
               }
             }}
             className="sensitive min-h-20 flex-1 resize-y"
@@ -460,7 +501,7 @@ function QueuedItem({ card, message }: { card: Card; message: QueuedMessage }) {
             <>
               <Button
                 size="icon-xs"
-                disabled={edit.pending || !text.trim()}
+                disabled={edit.pending || !text?.trim()}
                 onClick={save}
                 title={`Save${keyHint(submitKey)}`}
               >
@@ -469,7 +510,7 @@ function QueuedItem({ card, message }: { card: Card; message: QueuedMessage }) {
               <Button
                 size="icon-xs"
                 variant="ghost"
-                onClick={() => setEditing(false)}
+                onClick={() => setText(null)}
                 title="Cancel (Esc)"
               >
                 <X />
@@ -480,10 +521,7 @@ function QueuedItem({ card, message }: { card: Card; message: QueuedMessage }) {
               <Button
                 size="icon-xs"
                 variant="ghost"
-                onClick={() => {
-                  setText(message.text);
-                  setEditing(true);
-                }}
+                onClick={() => setText(message.text)}
                 title="Edit"
               >
                 <Pencil />

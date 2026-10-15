@@ -11,11 +11,14 @@ export const chatOpenKey = (sessionId: string) =>
   `seamux:chat-open:${sessionId}`;
 export const scrollKey = (sessionId: string) =>
   `seamux:chat-scroll:${sessionId}`;
+export const queueEditsKey = (sessionId: string) =>
+  `seamux:queue-edits:${sessionId}`;
 
 const PER_SESSION = [
   { area: "local", prefix: minimizedKey("") },
   { area: "session", prefix: chatOpenKey("") },
   { area: "session", prefix: scrollKey("") },
+  { area: "session", prefix: queueEditsKey("") },
 ] as const;
 
 // One poll's tally. `missing` holds, for each id, how many healthy polls in
