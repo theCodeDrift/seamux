@@ -898,7 +898,9 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
       codexNames().catch(() => new Map<string, string>()),
     ]);
   let liveKnown = true;
-  const live = await listLive().catch((err) => {
+  // Each chat by its process too, so one cleared a moment ago keeps its
+  // surface while cmux catches up with its new id.
+  const live = await listLive(agents).catch((err) => {
     liveKnown = false;
     cmux = cmuxTrouble(err) ?? cmux;
     if (!cmux) {

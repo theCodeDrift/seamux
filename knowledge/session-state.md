@@ -47,7 +47,14 @@ Until the new workspace starts Claude, nothing reports the session as live, so a
 
 - **Measured:** Claude Code 2.1.283.
 - **In seamux:** `processKey` in [board.server.ts](../app/lib/board.server.ts), and `notePinProcess` and `carryPin` in [store.server.ts](../app/lib/store.server.ts), which keep a pin on the chat across the change.
-- **See also:** [A chat moved to the background keeps its old transcript apart](background-sessions.md#a-chat-moved-to-the-background-keeps-its-old-transcript-apart), another way one chat ends up under two ids.
+- **See also:** [A chat moved to the background keeps its old transcript apart](background-sessions.md#a-chat-moved-to-the-background-keeps-its-old-transcript-apart), another way one chat ends up under two ids, and [cmux files a cleared chat's new id after `claude agents` does](#cmux-files-a-cleared-chats-new-id-after-claude-agents-does).
+
+## cmux files a cleared chat's new id after `claude agents` does
+
+After `/clear`, `claude agents` lists the new id about 100 ms before `cmux sessions list` does. For that moment cmux still has the old id, with the same `pid`, and then for another 100 ms or so it can list no record for the chat at all, before the new id appears under the same surface. A board refresh that landed in the gap showed the chat's card as idle, from its new, empty transcript, and "Not in a cmux surface", until the next refresh. Polling both several times a second over three clears missed the chat twice. So seamux finds a chat cmux doesn't list under its id by its process: the live record with the same pid, or the one last seen with it in the past five seconds. With that, six clears missed it never.
+
+- **Measured:** cmux 0.64.23, Claude Code 2.1.301, in a throwaway workspace; a plain prompt, `/compact` and `/branch` kept cmux and `claude agents` in step.
+- **In seamux:** `listLive` and `REFILE_GRACE_MS` in [drive.server.ts](../app/lib/drive.server.ts), which the board passes its `claude agents` rows; `runningClaudeSessions` in [harness.server.ts](../app/lib/harness.server.ts), for a caller without the pid; the `pid` check in [tests-cmux/contract.test.ts](../tests-cmux/contract.test.ts).
 
 ## A message sent straight after `/clear` reaches the cleared chat
 

@@ -257,6 +257,11 @@ describe("the cmux command", () => {
         surface_id: expect.any(String),
         workspace_id: expect.any(String),
       });
+      // The process, which finds a cleared chat cmux still files under its
+      // old id; absent or null when cmux lost it.
+      expect(s.pid ?? null).toSatisfy(
+        (v: unknown) => v === null || Number.isInteger(v),
+      );
       // null when cmux's record has lost the session's pid.
       expect(s.stored_pid_exists).toSatisfy(
         (v: unknown) => v === null || typeof v === "boolean",

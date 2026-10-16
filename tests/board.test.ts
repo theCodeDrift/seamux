@@ -412,6 +412,34 @@ it("offers a tool's own No/Yes confirmation as its options, not Approve", async 
   }
 });
 
+it("keeps a cleared chat drivable while cmux still files it under its old id", async () => {
+  // /clear moves `claude agents` to the new id a moment before cmux.
+  const agents = process.env.SEAMUX_TEST_CLAUDE_AGENTS!;
+  writeFileSync(
+    agents,
+    JSON.stringify([
+      {
+        pid: 4242,
+        cwd: "/work",
+        kind: "interactive",
+        startedAt: 0,
+        sessionId: "after-clear",
+        name: "demo",
+        status: "idle",
+      },
+    ]),
+  );
+  const { workspace } = cmux.addSession("before-clear", { pid: 4242 });
+  try {
+    const board = await loadBoard();
+    const card = board.cards.find((c) => c.sessionId === "after-clear");
+    expect(card?.drivable).toBe(true);
+    expect(card?.workspaceRef).toBe(workspace.ref);
+  } finally {
+    rmSync(agents, { force: true });
+  }
+});
+
 it("takes a task notification after its answered hand-back as no turn", async () => {
   // As Claude Code 2.1.289 logs a subagent's return: the <agent-message>
   // hand-back wakes the model, and the task notification for the same run

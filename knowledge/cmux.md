@@ -5,7 +5,7 @@ cmux is the terminal every chat seamux drives runs in, and the only way seamux w
 Entries about cmux that live in other domains:
 
 - [`workspace.create` ignores `command`](launching.md#workspacecreate-ignores-command), and [its login shell doesn't read `~/.zshrc`](launching.md#that-login-shell-does-not-read-zshrc).
-- [cmux's `any_agent_needs_input` goes stale](session-state.md#cmuxs-any_agent_needs_input-goes-stale).
+- [cmux's `any_agent_needs_input` goes stale](session-state.md#cmuxs-any_agent_needs_input-goes-stale), and [cmux files a cleared chat's new id after `claude agents` does](session-state.md#cmux-files-a-cleared-chats-new-id-after-claude-agents-does).
 - [cmux's wrapper passes `claude` subcommands straight through](background-sessions.md#cmuxs-wrapper-passes-claude-subcommands-straight-through).
 - [`/rename` retitles the cmux tab, not the workspace](names.md#rename-retitles-the-tab-not-the-workspace-and-cmux-reports-a-new-title-late), and [cmux allows two workspaces with the same title](names.md#cmux-allows-two-workspaces-with-the-same-title).
 - [cmux can read Claude Code's slash menu](slash-commands.md#cmux-can-read-claude-codes-slash-menu-but-it-is-no-source-for-a-list).

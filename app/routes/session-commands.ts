@@ -16,7 +16,9 @@ export async function loader({ params }: Route.LoaderArgs) {
   // knows its folder. An error here would take the whole board down.
   const info =
     (await sessionInfo(params.sessionId)) ??
-    (await listLive().catch(() => null))?.get(params.sessionId);
+    (await listLive([{ sessionId: params.sessionId }]).catch(() => null))?.get(
+      params.sessionId,
+    );
   if (!info?.cwd || !ENGINE_FEATURES[info.engine].slashCommands)
     return { commands: [] };
   try {

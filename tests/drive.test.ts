@@ -122,6 +122,43 @@ describe("listLive", () => {
     expect(live.get("codex-live")!.surface.surfaceId).toBe(codex.surface.id);
   });
 
+  it("finds a chat cmux still files under its id from before /clear", async () => {
+    const agents = process.env.SEAMUX_TEST_CLAUDE_AGENTS!;
+    // claude agents has the cleared chat's new id for this test's own
+    // process; cmux still has the old one.
+    writeFileSync(
+      agents,
+      JSON.stringify([{ sessionId: "claude-cleared", pid: process.pid }]),
+    );
+    try {
+      const claude = cmux.addSession("claude-before-clear", {
+        pid: process.pid,
+      });
+      cmux.addSession("claude-elsewhere", { pid: 2 ** 22 + 1 });
+
+      const live = await listLive([
+        { sessionId: "claude-cleared" },
+        { sessionId: "claude-unknown", pid: 2 ** 22 + 2 },
+      ]);
+
+      expect(live.get("claude-cleared")!.surface.surfaceId).toBe(
+        claude.surface.id,
+      );
+      expect(live.has("claude-unknown")).toBe(false);
+      // Nobody asked: cmux's ids only.
+      expect((await listLive()).has("claude-cleared")).toBe(false);
+      // cmux drops the old record before it files the new one.
+      cmux.endSession("claude-before-clear");
+      expect(
+        (await listLive([{ sessionId: "claude-cleared" }])).get(
+          "claude-cleared",
+        )!.surface.surfaceId,
+      ).toBe(claude.surface.id);
+    } finally {
+      rmSync(agents, { force: true });
+    }
+  });
+
   it("asks claude agents about a Claude session whose pid cmux lost", async () => {
     const agents = process.env.SEAMUX_TEST_CLAUDE_AGENTS!;
     // claude agents lists this test's own process, which is alive, and a pid

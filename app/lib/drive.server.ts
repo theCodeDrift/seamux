@@ -31,6 +31,7 @@ import { BIN_DIRS, findBin, SHELL } from "./bins.server.ts";
 import { cmuxCli, cmuxRpc } from "./cmux.server.ts";
 import {
   exclusive,
+  type Harness,
   harnessOf,
   HARNESSES,
   pause,
@@ -58,6 +59,7 @@ interface CmuxSession {
   session_id: string;
   agent: string;
   active_for_surface: boolean;
+  pid?: number | null;
   // null when cmux's record of the session has lost its pid.
   stored_pid_exists: boolean | null;
   // What the session was started with, and what the process now holding
@@ -89,6 +91,24 @@ const resumedUnfiled = ((globalThis as any).__seamuxResumedUnfiled ??= new Map<
   { engine: Engine; surface: Surface }
 >()) as Map<string, { engine: Engine; surface: Surface }>;
 
+// pid -> where a live session's process was last seen in cmux, and when.
+// cmux drops a cleared chat's old record a moment before it files the new
+// one, so for that moment its process is under no record at all. Kept on
+// globalThis, so a hot reload doesn't forget it.
+const lastSeen = ((globalThis as any).__seamuxLastSeen ??= new Map<
+  number,
+  { live: LiveSession; at: number }
+>()) as Map<number, { live: LiveSession; at: number }>;
+// Long enough for cmux to file a cleared chat, measured at about 150 ms.
+const REFILE_GRACE_MS = 5_000;
+
+// A session a caller is looking for, with the pid it runs in where the
+// caller knows it.
+export interface Wanted {
+  sessionId: string;
+  pid?: number | null;
+}
+
 // sessionId -> every live session cmux hosts of a harness seamux drives.
 // One cmux marks active for its surface is live while it has the mark;
 // one that never gets it, such as Codex, is live while its process is.
@@ -96,11 +116,23 @@ const resumedUnfiled = ((globalThis as any).__seamuxResumedUnfiled ??= new Map<
 // own list of running sessions decides those, where it has one. Nor does
 // cmux notice a pid handed on to another process, so a stored pid running
 // something other than what the session was launched with is a dead one.
-export async function listLive(): Promise<Map<string, LiveSession>> {
+// A chat whose id just changed in its own process, as after /clear, is
+// under its old id in cmux for a moment, then under none, so each of
+// `want` cmux doesn't list is found by its process: the live session with
+// the same pid, or the one last seen with it a moment ago, the pid from
+// the caller or the harness's own list.
+export async function listLive(
+  want: Wanted[] = [],
+): Promise<Map<string, LiveSession>> {
   const stdout = await cmuxCli(["sessions", "list", "--json"], {
     maxBuffer: 16 * 1024 * 1024,
   });
   const { sessions } = JSON.parse(stdout) as { sessions: CmuxSession[] };
+  const asked = new Map<Harness, Promise<Map<string, number>>>();
+  const runningFor = (h: Harness) => {
+    if (!asked.has(h)) asked.set(h, h.running!());
+    return asked.get(h)!;
+  };
   const pidless = new Set(
     sessions.flatMap((s) => {
       const h = harnessOf(s.agent);
@@ -110,11 +142,12 @@ export async function listLive(): Promise<Map<string, LiveSession>> {
     }),
   );
   const running = new Set(
-    (await Promise.all([...pidless].map((h) => h.running!()))).flatMap(
-      (ids) => [...ids],
-    ),
+    (await Promise.all([...pidless].map(runningFor))).flatMap((ids) => [
+      ...ids.keys(),
+    ]),
   );
   const map = new Map<string, LiveSession>();
+  const byPid = new Map<number, LiveSession>();
   for (const s of sessions) {
     const harness = harnessOf(s.agent);
     if (!harness) continue;
@@ -122,12 +155,33 @@ export async function listLive(): Promise<Map<string, LiveSession>> {
     if (s.stored_pid_exists == null) {
       if (!harness.running || !running.has(s.session_id)) continue;
     } else if (!s.stored_pid_exists || pidReused(s)) continue;
-    map.set(s.session_id, {
+    const live: LiveSession = {
       engine: harness.engine,
       surface: { surfaceId: s.surface_id, workspaceId: s.workspace_id },
       cwd: s.cwd ?? null,
       transcript: s.transcript_path ?? null,
-    });
+    };
+    map.set(s.session_id, live);
+    if (s.pid != null) byPid.set(s.pid, live);
+  }
+  const now = Date.now();
+  for (const [pid, seen] of lastSeen) {
+    if (now - seen.at > REFILE_GRACE_MS) lastSeen.delete(pid);
+  }
+  for (const [pid, live] of byPid) lastSeen.set(pid, { live, at: now });
+  const missing = want.filter((w) => !map.has(w.sessionId));
+  const lists = missing.some((w) => w.pid == null)
+    ? await Promise.all(
+        Object.values(HARNESSES)
+          .filter((h) => h.running)
+          .map((h) => runningFor(h).catch(() => new Map<string, number>())),
+      )
+    : [];
+  for (const { sessionId, pid } of missing) {
+    const found =
+      pid ?? lists.find((l) => l.has(sessionId))?.get(sessionId) ?? null;
+    const live = found != null ? lastSeen.get(found)?.live : undefined;
+    if (live) map.set(sessionId, live);
   }
   if (resumedUnfiled.size > 0) {
     const { workspaces } = await rpc<{ workspaces: { id: string }[] }>(
@@ -206,7 +260,7 @@ function driving<T>(
   macro: (s: Session) => Promise<T>,
 ): Promise<T> {
   return exclusive(sessionId, async () => {
-    const live = (await listLive()).get(sessionId);
+    const live = (await listLive([{ sessionId }])).get(sessionId);
     if (!live) throw new Error("This session is not running in a cmux surface");
     return macro(new Session(live.surface, HARNESSES[live.engine]));
   });
@@ -1060,10 +1114,7 @@ function openingMacros(name: string, cwd: string, wt: Worktree | null) {
 // branch are gone, so a later chat can't take an earlier one's branch, on
 // GitHub or anywhere else. An id whose worktree or branch is somehow there
 // already is drawn again.
-async function createWorktree(
-  cwd: string,
-  name: string,
-): Promise<NewWorktree> {
+async function createWorktree(cwd: string, name: string): Promise<NewWorktree> {
   let list: string;
   try {
     ({ stdout: list } = await run("git", [

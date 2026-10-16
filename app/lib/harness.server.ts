@@ -65,9 +65,10 @@ export interface Harness {
   // Whether cmux marks its session active for its surface. Then the mark
   // says it is live; otherwise its process does.
   markedActive: boolean;
-  // The session ids of its processes still running, for a session whose
-  // pid cmux lost, where the harness can list them itself.
-  running?: () => Promise<Set<string>>;
+  // The session id of each of its processes still running, with its pid,
+  // for a session whose pid cmux lost or whose id cmux hasn't caught up
+  // with, where the harness can list them itself.
+  running?: () => Promise<Map<string, number>>;
   // cmux files its session under a surface only once a prompt goes in, so a
   // resumed one stays under its old surface until then.
   filedOnPrompt: boolean;
@@ -154,8 +155,8 @@ export function harnessOf(agent: string): Harness | null {
   return Object.values(HARNESSES).find((h) => h.cmuxAgent === agent) ?? null;
 }
 
-// The session ids of every Claude Code process still running.
-async function runningClaudeSessions(): Promise<Set<string>> {
+// The session id of every Claude Code process still running, with its pid.
+async function runningClaudeSessions(): Promise<Map<string, number>> {
   const agents = await run("claude", ["agents", "--json", "--all"], {
     maxBuffer: 32 * 1024 * 1024,
     timeout: 10_000,
@@ -167,10 +168,10 @@ async function runningClaudeSessions(): Promise<Set<string>> {
       }[],
     () => [],
   );
-  return new Set(
+  return new Map(
     agents
       .filter((a) => a.sessionId && a.pid && processAlive(a.pid))
-      .map((a) => a.sessionId!),
+      .map((a) => [a.sessionId!, a.pid!]),
   );
 }
 

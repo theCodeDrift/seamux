@@ -282,7 +282,7 @@ export async function sendOrSignIn(
     await sendMessage(sessionId, text, about);
     return true;
   }
-  const live = (await listLive()).get(sessionId);
+  const live = (await listLive([{ sessionId }])).get(sessionId);
   if (!live) throw new Error("This session is not running in a cmux surface");
   startLogin(live.engine);
   return false;
