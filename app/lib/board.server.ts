@@ -40,6 +40,7 @@ import {
   type CodexSummary,
   type CodexTranscript,
 } from "./codex.server";
+import { listingPids } from "./commands.server";
 import { ENGINES, type Engine } from "./config";
 import { configOrDefaults } from "./config.server";
 import {
@@ -140,8 +141,13 @@ async function readJson<T>(cmd: string, args: string[]): Promise<T> {
   return JSON.parse(stdout) as T;
 }
 
+// Without the headless sessions the board runs to list slash commands,
+// which `claude agents` takes for chats while they run.
 async function listAgents(): Promise<AgentRow[]> {
-  return readJson<AgentRow[]>("claude", ["agents", "--json", "--all"]);
+  const own = listingPids();
+  return (
+    await readJson<AgentRow[]>("claude", ["agents", "--json", "--all"])
+  ).filter((a) => a.pid == null || !own.has(a.pid));
 }
 
 // The ids, names or session ids that a running `claude attach` names.

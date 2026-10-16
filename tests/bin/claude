@@ -1,16 +1,60 @@
 #!/usr/bin/env node
 // The fake `claude` command, first on PATH in the tests (tests/setup.ts), so no
 // test reads the real Claude Code's sessions. `claude agents --json` lists
-// what a test wrote to SEAMUX_TEST_CLAUDE_AGENTS, else none; anything else is
-// refused.
-import { existsSync, readFileSync } from "node:fs";
+// what a test wrote to SEAMUX_TEST_CLAUDE_AGENTS, else none. A headless
+// session with stream-json input answers `initialize` with a few commands,
+// after SEAMUX_TEST_CLAUDE_LIST_DELAY_MS, and lists itself in `claude agents`
+// meanwhile, as the real one does. Anything else is refused.
+import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createInterface } from "node:readline";
 
 const args = process.argv.slice(2);
+const state = process.env.SEAMUX_TEST_CLAUDE_AGENTS;
+const agents = () =>
+  state && existsSync(state) ? JSON.parse(readFileSync(state, "utf8")) : [];
 if (args[0] === "agents" && args.includes("--json")) {
-  const state = process.env.SEAMUX_TEST_CLAUDE_AGENTS;
-  process.stdout.write(
-    state && existsSync(state) ? readFileSync(state, "utf8") : "[]\n",
-  );
+  process.stdout.write(JSON.stringify(agents()) + "\n");
+  process.exit(0);
+}
+if (args[0] === "-p" && args.includes("stream-json")) {
+  if (state) {
+    const row = {
+      pid: process.pid,
+      cwd: process.cwd(),
+      kind: "interactive",
+      startedAt: Date.now(),
+      sessionId: randomUUID(),
+      name: "headless",
+      status: "idle",
+    };
+    writeFileSync(state, JSON.stringify([...agents(), row]));
+  }
+  const delay = Number(process.env.SEAMUX_TEST_CLAUDE_LIST_DELAY_MS ?? 0);
+  for await (const line of createInterface({ input: process.stdin })) {
+    const msg = JSON.parse(line);
+    if (msg.type !== "control_request") continue;
+    await new Promise((r) => setTimeout(r, delay));
+    const commands = [
+      { name: "gtd", description: "Get things done", argumentHint: "[when]" },
+      {
+        name: "clear",
+        description: "Clear the conversation",
+        argumentHint: "",
+      },
+      { name: "__plumbing", description: "", argumentHint: "" },
+    ];
+    process.stdout.write(
+      JSON.stringify({
+        type: "control_response",
+        response: {
+          subtype: "success",
+          request_id: msg.request_id,
+          response: { commands },
+        },
+      }) + "\n",
+    );
+  }
   process.exit(0);
 }
 process.stderr.write(`fake claude: unsupported command: ${args.join(" ")}\n`);

@@ -1,11 +1,12 @@
 // The slash commands a Claude Code session in a folder accepts: its
 // built-ins, skills and MCP prompts, for autocomplete in the board's inputs.
 //
-// A headless Claude Code started with stream-json input prints the list as
-// its first line, before any prompt, so closing its input once that line
-// arrives runs no turn. Measured on Claude Code 2.1.282: about two seconds.
-// The terminal-only commands (/add-dir, /artifacts and a few more) are not
-// in it.
+// A headless Claude Code started with stream-json input answers an
+// `initialize` control request with the list, before any prompt, so closing
+// its input once the answer arrives runs no turn: about half a second on
+// Claude Code 2.1.301. Up to 2.1.282 or so it printed the list unasked, as
+// its first line, and stopped doing so by 2.1.301. The terminal-only
+// commands (/add-dir, /artifacts and a few more) are in neither.
 
 import { spawn } from "node:child_process";
 import { dirname } from "node:path";
@@ -27,6 +28,16 @@ const cache = ((globalThis as any).__seamuxCommands ??= new Map()) as Map<
   string,
   Entry
 >;
+
+// The pids of the headless sessions listing commands now. `claude agents`
+// lists each as an interactive chat while it runs, which the board must
+// leave out. On globalThis so a hot reload keeps it.
+const listing = ((globalThis as any).__seamuxListingPids ??=
+  new Set()) as Set<number>;
+
+export function listingPids(): ReadonlySet<number> {
+  return listing;
+}
 
 export function slashCommands(cwd: string): Promise<SlashCommand[]> {
   const hit = cache.get(cwd);
@@ -68,6 +79,8 @@ function listCommands(cwd: string): Promise<SlashCommand[]> {
         },
       },
     );
+    const pid = child.pid;
+    if (pid != null) listing.add(pid);
     let out = "";
     let done = false;
     const finish = (err: Error | null, commands?: SlashCommand[]) => {
@@ -84,8 +97,19 @@ function listCommands(cwd: string): Promise<SlashCommand[]> {
       TIMEOUT_MS,
     );
     child.on("error", (err) => finish(err));
-    child.on("exit", () =>
-      finish(new Error("Claude Code exited without listing commands")),
+    child.on("exit", () => {
+      if (pid != null) listing.delete(pid);
+      finish(new Error("Claude Code exited without listing commands"));
+    });
+    // A child that exits first closes the pipe under the request, which its
+    // exit already reports.
+    child.stdin.on("error", () => {});
+    child.stdin.write(
+      JSON.stringify({
+        type: "control_request",
+        request_id: "seamux-commands",
+        request: { subtype: "initialize" },
+      }) + "\n",
     );
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
@@ -99,6 +123,13 @@ function listCommands(cwd: string): Promise<SlashCommand[]> {
         } catch {
           continue;
         }
+        if (msg?.type === "control_response") {
+          const commands = msg.response?.response?.commands;
+          return Array.isArray(commands)
+            ? finish(null, parse(commands))
+            : finish(new Error("Claude Code listed no commands"));
+        }
+        // What Claude Code printed unasked before 2.1.301.
         if (msg?.type === "system" && Array.isArray(msg.commands)) {
           return finish(null, parse(msg.commands));
         }
