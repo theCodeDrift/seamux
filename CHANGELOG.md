@@ -1,5 +1,16 @@
 # seamux
 
+## 0.4.1
+
+### Patch Changes
+
+- 1426941: Attention now runs across the full width of the board, under the dispatch bar and above the columns, instead of taking the leftmost column: a service that needs you pushes the columns down rather than squeezing them. On a phone it stays the first screen of the carousel.
+- 28f7cd3: A chat just cleared with `/clear` no longer flashes up as idle and "Not in a cmux surface" for one refresh. Claude Code moves to the new session id a moment before cmux does, and the board now finds the chat by its process while cmux catches up.
+- 6db3ca4: A Codex chat started in a folder Codex hasn't seen no longer sits on its trust dialog while the board shows it working: seamux answers the dialog, as it does for Claude Code.
+- 213a28a: Slash-command suggestions in the board's reply boxes work again with Claude Code 2.1.301, which stopped printing its command list unasked; seamux now asks for it. Typing `/` also no longer puts an extra idle card on the board saying "Not in a cmux surface": that was the short-lived Claude Code process seamux starts to list the commands, which `claude agents` reports as a chat.
+- 194e72b: Editing a queued message in a chat's full view now survives a reload, such as the board restarting after a landing: the edit stays open with what you'd typed.
+- d845874: The chat shows the whole conversation again. It read only the last 2 MB of a transcript, which tool output can fill with a handful of messages, so long chats seemed to have lost their history. It now shows the last 100 messages, with "Show earlier messages" to go further back, and each run of tool calls between replies as one line, such as "💻 called Bash ×3, Read".
+
 ## 0.4.0
 
 ### Minor Changes
