@@ -88,6 +88,7 @@ import {
   type SubagentRow,
 } from "./store.server";
 import { failureFor } from "./send-failures.server";
+import { memoryPressure } from "./memory.server";
 
 const run = promisify(execFile);
 const CLAUDE_DIR = join(homedir(), ".claude");
@@ -1229,6 +1230,7 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
           : "npx seamux",
       home: SEAMUX_HOME,
     },
+    memory: await memoryPressure(),
   };
 }
 

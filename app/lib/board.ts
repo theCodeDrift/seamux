@@ -261,7 +261,11 @@ export interface Board {
   // Why seamux can't reach cmux, which leaves it unable to drive any chat;
   // null when it can.
   cmux: CmuxProblem | null;
+  // How hard macOS is pressed for memory; null when it can't be read.
+  memory: MemoryPressure | null;
 }
+
+export type MemoryPressure = "normal" | "warn" | "critical";
 
 export interface CmuxProblem {
   trouble: CmuxTrouble;

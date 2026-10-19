@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { AttachmentChips } from "~/components/attachments";
 import { DirectoryPicker } from "~/components/directory-picker";
+import { LoadedConfirm } from "~/components/memory-pressure";
 
 import { Button } from "~/components/ui/button";
 import { NativeSelect } from "~/components/ui/native-select";
@@ -17,6 +18,7 @@ import {
   MAX_ATTACHMENTS,
   type Attachment,
 } from "~/lib/attachments";
+import type { MemoryPressure } from "~/lib/board";
 import { ENGINE_LABELS, ENGINES, type Engine } from "~/lib/config";
 import { useOptimistic } from "~/lib/optimistic";
 import { releaseFocus } from "~/lib/use-focus-restore";
@@ -51,6 +53,7 @@ export function DispatchBar({
   worktreeByDefault,
   defaultEngine,
   engines,
+  memory,
   onDispatched,
 }: {
   // The configured directories; empty means offer every one seamux finds.
@@ -59,6 +62,8 @@ export function DispatchBar({
   defaultEngine: Engine;
   // Which agents this Mac can launch.
   engines: Record<Engine, boolean>;
+  // How hard macOS is pressed for memory: at critical, asked before sending.
+  memory: MemoryPressure | null;
   // Called once a dispatch has started; a failure doesn't call it.
   onDispatched?: () => void;
 }) {
@@ -193,7 +198,13 @@ export function DispatchBar({
     directories.length > 0 ? directories : (dirs.data?.directories ?? []);
 
   const canDispatch = !pending && prompt.trim() !== "" && cwd.trim() !== "";
+  const [confirming, setConfirming] = useState(false);
   const submit = () => {
+    if (!canDispatch) return;
+    if (memory === "critical") setConfirming(true);
+    else send();
+  };
+  const send = () => {
     if (!canDispatch) return;
     sent.current = prompt;
     setPrompt("");
@@ -341,6 +352,11 @@ export function DispatchBar({
       {result && !pending && !result.ok && (
         <p className="px-1 text-sm text-destructive">{result.error}</p>
       )}
+      <LoadedConfirm
+        open={confirming}
+        onOpenChange={setConfirming}
+        onConfirm={send}
+      />
     </section>
   );
 }

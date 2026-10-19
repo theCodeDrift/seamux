@@ -62,6 +62,7 @@ import {
 import { useSlashMenu } from "~/components/slash-menu";
 import { ConfigDialog } from "~/components/config-dialog";
 import { ContextBar } from "~/components/context-bar";
+import { MemoryBadge } from "~/components/memory-pressure";
 import { DispatchBar } from "~/components/dispatch-bar";
 import { workerCount } from "~/components/worker-list";
 import { Markdown } from "~/components/markdown";
@@ -2226,6 +2227,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 <ThemeToggle />
               </span>
               <span className="flex shrink-0 items-center gap-1 md:hidden">
+                <MemoryBadge memory={board.memory} className="mr-1" />
                 <Button
                   size="sm"
                   onClick={() => setDispatchOpen(true)}
@@ -2242,6 +2244,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 />
               </span>
               <span className="flex min-w-0 items-center gap-3 max-md:hidden">
+                <MemoryBadge memory={board.memory} />
                 {remote.enabled && remote.mdns.listening && (
                   <a
                     href={remote.mdns.url}
@@ -2315,6 +2318,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 worktreeByDefault={config.worktreeByDefault}
                 defaultEngine={config.defaultEngine}
                 engines={engines}
+                memory={board.memory}
                 onDispatched={() => setDispatchOpen(false)}
               />
             </div>
