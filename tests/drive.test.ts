@@ -740,7 +740,7 @@ describe("interrupt", () => {
 describe("answerApproval", () => {
   it("approves Claude Code with 1, which is always Yes", async () => {
     const { surface } = cmux.addSession("s");
-    await answerApproval("s", true, "claude");
+    await answerApproval("s", "approve", "claude");
     expect(input(surface)).toEqual(["text:1"]);
   });
 
@@ -749,7 +749,7 @@ describe("answerApproval", () => {
       agent: "codex",
       active_for_surface: false,
     });
-    await answerApproval("s", true, "codex");
+    await answerApproval("s", "approve", "codex");
     expect(input(surface)).toEqual(["text:y"]);
   });
 
@@ -758,8 +758,26 @@ describe("answerApproval", () => {
       agent: "cursor",
       active_for_surface: false,
     });
-    await answerApproval("s", true, "cursor");
+    await answerApproval("s", "approve", "cursor");
     expect(input(surface)).toEqual(["text:y"]);
+  });
+
+  // Shift+Tab is "Run Everything", which runs it and every later command.
+  it("approves every Cursor command with Shift+Tab", async () => {
+    const { surface } = cmux.addSession("s", {
+      agent: "cursor",
+      active_for_surface: false,
+    });
+    await answerApproval("s", "all", "cursor");
+    expect(input(surface)).toEqual(["key:shift+tab"]);
+  });
+
+  it("refuses to approve every call where the agent can't", async () => {
+    const { surface } = cmux.addSession("s");
+    await expect(answerApproval("s", "all", "claude")).rejects.toThrow(
+      "can't approve every call",
+    );
+    expect(input(surface)).toEqual([]);
   });
 
   // Esc asks what to tell the agent instead, and an empty answer skips.
@@ -768,13 +786,13 @@ describe("answerApproval", () => {
       agent: "cursor",
       active_for_surface: false,
     });
-    await answerApproval("s", false, "cursor");
+    await answerApproval("s", "deny", "cursor");
     expect(input(surface)).toEqual(["key:escape", "key:enter"]);
   });
 
   it("denies with Esc, since No has no fixed number", async () => {
     const { surface } = cmux.addSession("s");
-    await answerApproval("s", false, "claude");
+    await answerApproval("s", "deny", "claude");
     expect(input(surface)).toEqual(["key:escape"]);
   });
 });

@@ -253,10 +253,14 @@ export async function loadCursorMessages(path: string): Promise<ChatMessage[]> {
 //     Run Everything (shift+tab)
 //     Skip & tell the agent what to do instead (esc or n)
 //
-// `y` approves and Esc refuses.
-export function parseCursorApproval(
-  screen: string,
-): { title: string; detail: string | null; tool: string | null } | null {
+// `y` approves, Shift+Tab approves and runs every later command unasked,
+// and Esc refuses.
+export function parseCursorApproval(screen: string): {
+  title: string;
+  detail: string | null;
+  tool: string | null;
+  all: string | null;
+} | null {
   const lines = screen.split("\n").map((l) => l.trim());
   while (lines.length && !lines.at(-1)) lines.pop();
   if (!/\(esc or n\)$/.test(lines.at(-1) ?? "")) return null;
@@ -267,9 +271,13 @@ export function parseCursorApproval(
   for (let up = at - 1; up >= 0 && !/^─{8,}$/.test(lines[up]); up--) {
     command ??= /^\$\s+(.+?)(?:\s+in\s+\S+)?$/.exec(lines[up])?.[1];
   }
+  let all: string | null = null;
+  for (const line of lines.slice(at + 1))
+    all ??= /^(\S.*?)\s+\(shift\+tab\)$/.exec(line)?.[1] ?? null;
   return {
     title: lines[at],
     detail: command ? excerpt(command) : null,
     tool: command ? "Shell" : null,
+    all,
   };
 }

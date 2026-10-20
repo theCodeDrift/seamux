@@ -55,8 +55,10 @@ export interface Harness {
   // screen as cmux's terminal.replay draws it, for a harness whose box can
   // be read that closely.
   draft?: (grid: ReplayGrid) => string | null;
-  // What approves a permission prompt, and what refuses it.
+  // What approves a permission prompt, and what refuses it. A harness whose
+  // prompt can approve every later call too has the key for that.
   approveKey: string;
+  approveAllKey?: string;
   denyKeys: string[];
   // Launching it: the agent, cmux's wrapper for it, the dialog a new folder
   // opens on and the keys that trust it, and what shows once it is up and
@@ -199,6 +201,9 @@ export const HARNESSES: Record<Engine, Harness> = {
     // shows, so this is how long sending it waits.
     shownWaitMs: 3_000,
     approveKey: "y",
+    // "Run Everything": runs this command and puts the chat in its Run
+    // Everything mode, where no later command asks.
+    approveAllKey: "shift+tab",
     // Esc asks what to tell the agent instead, and an empty answer skips
     // the call, which the agent is told was rejected.
     denyKeys: ["escape", "enter"],

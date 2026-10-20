@@ -51,6 +51,7 @@ const INTENTS = new Set([
   "rename",
   "answer",
   "approve",
+  "approve-all",
   "deny",
   "choose",
   "queue",
@@ -204,7 +205,11 @@ async function perform(
       ask.questions,
     );
     await answerQuestion(sessionId, ask.questions, answers);
-  } else if (intent === "approve" || intent === "deny") {
+  } else if (
+    intent === "approve" ||
+    intent === "approve-all" ||
+    intent === "deny"
+  ) {
     // Only the prompt still open, for the same reason as an answer.
     const card = (await loadBoard()).cards.find(
       (c) => c.sessionId === sessionId,
@@ -213,7 +218,14 @@ async function perform(
     if (!card || !approval || approval.toolUseId !== form.get("toolUseId")) {
       throw new Error("That approval is no longer open");
     }
-    await answerApproval(sessionId, intent === "approve", card.engine);
+    if (intent === "approve-all" && !approval.all) {
+      throw new Error("That approval can't approve every call");
+    }
+    await answerApproval(
+      sessionId,
+      intent === "approve" ? "approve" : intent === "deny" ? "deny" : "all",
+      card.engine,
+    );
   } else if (intent === "choose") {
     // answerDialog reads the screen again, so only the dialog still open
     // gets the key.

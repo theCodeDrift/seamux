@@ -188,6 +188,8 @@ function QuestionForm({
 
 // An open permission prompt, answered from the card. Approve is the dialog's
 // "Yes"; Deny refuses the call and ends the turn, so the user can reply.
+// Where the prompt can approve every later call as well, as Cursor's "Run
+// Everything" does, that option shows under its own label.
 function ApprovalButtons({
   card,
   approval,
@@ -197,7 +199,7 @@ function ApprovalButtons({
 }) {
   const { submit, pending, error } = useSessionAction(card.sessionId);
   const disabled = !card.drivable || pending;
-  const answer = (intent: "approve" | "deny") =>
+  const answer = (intent: "approve" | "approve-all" | "deny") =>
     submit(intent, { toolUseId: approval.toolUseId });
   return (
     <div className="flex items-center justify-end gap-2">
@@ -210,6 +212,16 @@ function ApprovalButtons({
       >
         Deny
       </Button>
+      {approval.all && (
+        <Button
+          size="xs"
+          variant="outline"
+          disabled={disabled}
+          onClick={() => answer("approve-all")}
+        >
+          {approval.all}
+        </Button>
+      )}
       <Button size="xs" disabled={disabled} onClick={() => answer("approve")}>
         {pending ? "Answering…" : "Approve"}
       </Button>

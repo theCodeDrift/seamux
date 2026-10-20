@@ -73,8 +73,10 @@ export interface Waiting {
   detail: string | null;
   // An open AskUserQuestion, which the board can answer.
   ask: { toolUseId: string; questions: Question[] } | null;
-  // An open permission prompt, which the board can approve or deny.
-  approval: { toolUseId: string } | null;
+  // An open permission prompt, which the board can approve or deny. `all`
+  // is the label of the option that approves this call and every later one
+  // in the chat, where the prompt draws one.
+  approval: { toolUseId: string; all?: string } | null;
   // Any other dialog, such as /exit's "Background work is running", read
   // off the terminal since no tool call is behind it. Or a tool's own
   // confirmation in place of `approval`, which its options answer and

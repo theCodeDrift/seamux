@@ -1479,7 +1479,10 @@ async function cursorCard(
       detail: approval?.detail ?? null,
       ask: null,
       approval: approval
-        ? { toolUseId: `${approval.title}\n${approval.detail ?? ""}` }
+        ? {
+            toolUseId: `${approval.title}\n${approval.detail ?? ""}`,
+            ...(approval.all && { all: approval.all }),
+          }
         : null,
       dialog: null,
     };

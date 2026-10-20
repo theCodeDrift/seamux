@@ -95,6 +95,12 @@ export async function approve(s: Session) {
   await s.keys(s.harness.approveKey);
 }
 
+export async function approveAll(s: Session) {
+  if (!s.harness.approveAllKey)
+    throw new Error("This agent can't approve every call at once");
+  await s.press(s.harness.approveAllKey);
+}
+
 export async function deny(s: Session) {
   for (const [i, key] of s.harness.denyKeys.entries()) {
     if (i > 0) await pause(KEY_GAP_MS);

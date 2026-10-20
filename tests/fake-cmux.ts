@@ -87,7 +87,14 @@ class Refusal extends Error {
 // The keys seamux presses, each checked against cmux by tests-cmux/. cmux
 // refuses a key it doesn't know, and so does the fake, so a misspelt one
 // fails here too.
-export const KEYS = ["enter", "escape", "tab", "down", "shift+enter"];
+export const KEYS = [
+  "enter",
+  "escape",
+  "tab",
+  "down",
+  "shift+enter",
+  "shift+tab",
+];
 
 // Methods that act on one terminal, which must always be named: cmux falls
 // back to the caller's own surface when one isn't (CLAUDE.md).

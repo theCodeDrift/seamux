@@ -20,6 +20,7 @@ type Intent =
   | "rename"
   | "answer"
   | "approve"
+  | "approve-all"
   | "deny"
   | "choose"
   | "queue"
@@ -38,6 +39,7 @@ const MOVES: Partial<Record<Intent, Column>> = {
   "draft-send": "working",
   answer: "working",
   approve: "working",
+  "approve-all": "working",
   interrupt: "idle",
   resume: "idle",
   close: "done",

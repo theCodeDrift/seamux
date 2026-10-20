@@ -564,7 +564,7 @@ it("reads a Cursor chat from its transcript, meta.json and cmux's hooks", async 
         reason: "permission prompt",
         tool: "Shell",
         detail: "date +%s > stamp.txt",
-        approval: { toolUseId: expect.any(String) },
+        approval: { toolUseId: expect.any(String), all: "Run Everything" },
       },
     });
 

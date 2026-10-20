@@ -398,15 +398,17 @@ export async function answerQuestion(
 
 // Answer an open permission prompt, as read off `engine`'s screen. Measured
 // against Claude Code 2.1.281 and Codex 0.156.1.
+// "all" approves this call and every later one, where the harness can.
 export async function answerApproval(
   sessionId: string,
-  allow: boolean,
+  answer: "approve" | "all" | "deny",
   engine: Engine,
 ) {
   await driving(sessionId, (s) => {
     if (s.harness.engine !== engine)
       throw new Error("That approval is no longer open");
-    return allow ? macros.approve(s) : macros.deny(s);
+    if (answer === "all") return macros.approveAll(s);
+    return answer === "approve" ? macros.approve(s) : macros.deny(s);
   });
 }
 
