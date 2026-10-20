@@ -57,9 +57,17 @@ export async function resume(s: Session) {
 }
 
 // A slash command, such as /exit or /rename. Pasted, since typing it would
-// open the slash menu, whose Enter picks whatever it has highlighted.
+// open the slash menu, whose Enter picks whatever it has highlighted, except
+// where the harness's own menu picks the command typed: there a paste can
+// send itself or lose the Enter after it, so the command is typed and sent
+// as a message is.
 export async function command(s: Session, line: string) {
   await s.clearInput();
+  if (s.harness.typesCommands) {
+    await s.type(line);
+    await s.submit(line);
+    return;
+  }
   await s.paste(line);
   await s.press("enter");
 }
@@ -81,13 +89,17 @@ export async function interrupt(s: Session) {
 }
 
 // A permission prompt. "No" moves with the options offered, so a denial is
-// Esc, which refuses the call and ends the turn for the user to reply to.
+// the harness's own keys: Esc, which refuses the call and ends the turn for
+// the user to reply to, where that is what Esc does.
 export async function approve(s: Session) {
   await s.keys(s.harness.approveKey);
 }
 
 export async function deny(s: Session) {
-  await s.press("escape");
+  for (const [i, key] of s.harness.denyKeys.entries()) {
+    if (i > 0) await pause(KEY_GAP_MS);
+    await s.press(key);
+  }
 }
 
 // A dialog's option, counted from 0. In a numbered dialog its digit picks

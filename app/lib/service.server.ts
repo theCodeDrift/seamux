@@ -15,6 +15,8 @@
 //   exits 0, or "Login failed: ..." and exits 1.
 // - `codex login --device-auth` prints a URL and a one-time code to enter
 //   there, and needs no input.
+// - `agent login`, Cursor's, opens a browser unless NO_OPEN_BROWSER is set.
+//   What it prints then is unmeasured; the board shows the first URL.
 
 import { spawn, type ChildProcess, execFile } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -80,8 +82,9 @@ const state = ((globalThis as any).__seamuxServices ??= {
 interface SignIn {
   // Whether it is signed in, or null when it couldn't be told.
   status: () => Promise<boolean | null>;
-  // The command that signs in.
+  // The command that signs in, and what it needs in its environment.
   login: [string, string[]];
+  loginEnv?: Record<string, string>;
   // It hands BROWSER a URL that finishes on this Mac, and the stand-in
   // browser keeps it for the board.
   localUrl: boolean;
@@ -110,6 +113,15 @@ const SIGN_IN: Record<Engine, SignIn> = {
     deviceCode: /\b[A-Z0-9]{4}-[A-Z0-9]{4,6}\b/,
     recordsExpiry: false,
   },
+  cursor: {
+    status: askCursor,
+    login: ["agent", ["login"]],
+    loginEnv: { NO_OPEN_BROWSER: "1" },
+    localUrl: false,
+    takesCode: false,
+    deviceCode: null,
+    recordsExpiry: false,
+  },
 };
 
 // `claude auth status` exits 1 when signed out, with the same JSON.
@@ -127,6 +139,22 @@ async function askClaude(): Promise<boolean | null> {
     } catch {
       return null;
     }
+  }
+}
+
+// `agent status` prints "✓ Logged in as <email>" or "Not logged in".
+async function askCursor(): Promise<boolean | null> {
+  try {
+    const { stdout } = await run("agent", ["status"], {
+      env: env(),
+      timeout: 10_000,
+    });
+    if (/Not logged in/i.test(stdout)) return false;
+    return /Logged in as/i.test(stdout) ? true : null;
+  } catch (err: any) {
+    return typeof err.stdout === "string" && /Not logged in/i.test(err.stdout)
+      ? false
+      : null;
   }
 }
 
@@ -211,9 +239,13 @@ export function startLogin(service: Engine) {
     : null;
   const urlFile = dir ? join(dir, "url") : null;
   const child = spawn(cmd, args, {
-    env: urlFile
-      ? { ...env(), BROWSER: LOGIN_BROWSER, SEAMUX_LOGIN_URL_FILE: urlFile }
-      : env(),
+    env: {
+      ...env(),
+      ...signIn.loginEnv,
+      ...(urlFile
+        ? { BROWSER: LOGIN_BROWSER, SEAMUX_LOGIN_URL_FILE: urlFile }
+        : {}),
+    },
     stdio: [signIn.takesCode ? "pipe" : "ignore", "pipe", "pipe"],
   });
   const login: Login = {

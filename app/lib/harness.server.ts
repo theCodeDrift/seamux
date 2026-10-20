@@ -1,17 +1,20 @@
-// How seamux types into a chat: what each harness (Claude Code, Codex) needs
+// How seamux types into a chat: what each harness (Claude Code, Codex, Cursor) needs
 // to know, and a Session, the handle every macro drives a chat through. The
 // key sequences live here and in macros.server.ts, nowhere else, so a fix to
 // one reaches every verb that uses it. knowledge/prompt-box.md has the measurements
 // behind each.
 
 import { execFile } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { appendFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
 import { CMUX_BIN } from "./bins.server.ts";
 import { cmuxRpc } from "./cmux.server.ts";
 import { renameCodexSession } from "./codex.server.ts";
+import { runningCursorSessions } from "./cursor.server.ts";
 import type { Engine } from "./config.ts";
 
 const rpc = cmuxRpc;
@@ -31,25 +34,39 @@ export const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export interface Harness {
   engine: Engine;
-  // What leads the input line when it isn't in shell mode, where both
-  // harnesses lead it with "!".
+  // What leads the input line when it isn't in shell mode, where every
+  // harness leads it with "!", after `inputIndent` columns of space.
   inputLead: string;
-  // Whether a message is typed a line at a time, or pasted whole.
+  inputIndent: number;
+  // The line drawn right above the input line, for a harness whose dialogs
+  // lead their options with the input line's mark.
+  boxTop?: RegExp;
+  // Whether a message is typed a line at a time, or pasted whole, and
+  // whether a slash command is typed, where its slash menu picks the command
+  // typed, or pasted.
   typesMessages: boolean;
+  typesCommands: boolean;
   // Whether a message still sits in the prompt box after its Enter, for a
-  // harness whose box can be read that closely.
+  // harness whose box can be read that closely, and how long the box may
+  // take to show a message written into it.
   unsent?: (screen: string, text: string) => boolean;
+  shownWaitMs?: number;
   // What its prompt box holds that was typed and never sent, read off the
   // screen as cmux's terminal.replay draws it, for a harness whose box can
   // be read that closely.
   draft?: (grid: ReplayGrid) => string | null;
-  // What approves a permission prompt.
+  // What approves a permission prompt, and what refuses it.
   approveKey: string;
+  denyKeys: string[];
   // Launching it: the agent, cmux's wrapper for it, the dialog a new folder
   // opens on and the keys that trust it, and what shows once it is up and
-  // past that dialog.
+  // past that dialog. An agent with no wrapper is launched as itself, and
+  // cmux learns of it from the hooks cmux installed into it.
   bin: string;
-  wrapper: string;
+  wrapper: string | null;
+  // Whether cmux will register its sessions: its wrapper is there, or its
+  // hooks are installed.
+  integrated: () => boolean;
   trust: { prompt: string; keys: string[] };
   ready: RegExp;
   resumeArgs: (sessionId: string) => string[];
@@ -69,8 +86,12 @@ export interface Harness {
   // for a session whose pid cmux lost or whose id cmux hasn't caught up
   // with, where the harness can list them itself.
   running?: () => Promise<Map<string, number>>;
-  // cmux files its session under a surface only once a prompt goes in, so a
-  // resumed one stays under its old surface until then.
+  // cmux keeps a resumed session's old pid, so a stored pid that is gone
+  // says nothing and `running` decides.
+  keepsOldPid?: boolean;
+  // cmux files its session under a surface only once a prompt goes in, or
+  // later, so a resumed one stays under its old surface until then, and a
+  // new one under none.
   filedOnPrompt: boolean;
   // Names a closed chat, as /rename names an open one.
   renameClosed: (
@@ -86,7 +107,8 @@ export interface Harness {
   clear?: RegExp;
 }
 
-// Measured against Claude Code 2.1.281 to 2.1.286 and codex-cli 0.156.1.
+// Measured against Claude Code 2.1.281 to 2.1.286, codex-cli 0.156.1 and
+// Cursor Agent 2026.10.18.
 export const HARNESSES: Record<Engine, Harness> = {
   // Claude Code folds a long paste into a "[Pasted text #1]" placeholder and
   // hands it to the model wrapped in <pasted_content>, so a message for it is
@@ -95,13 +117,17 @@ export const HARNESSES: Record<Engine, Harness> = {
   claude: {
     engine: "claude",
     inputLead: "❯",
+    inputIndent: 0,
     typesMessages: true,
+    typesCommands: false,
     unsent: endsPromptBox,
     draft: promptBoxDraft,
-    // 1 is always "Yes".
+    // 1 is always "Yes", and Esc refuses, whatever "No" is numbered.
     approveKey: "1",
+    denyKeys: ["escape"],
     bin: "claude",
     wrapper: join(CMUX_BIN, "cmux-claude-wrapper"),
+    integrated: () => existsSync(join(CMUX_BIN, "cmux-claude-wrapper")),
     // Its default is "No, exit", so Enter alone would refuse.
     trust: { prompt: "Yes, I trust this folder", keys: ["down", "enter"] },
     ready: /Claude Code v/,
@@ -130,10 +156,14 @@ export const HARNESSES: Record<Engine, Harness> = {
   codex: {
     engine: "codex",
     inputLead: "›",
+    inputIndent: 0,
     typesMessages: false,
+    typesCommands: false,
     approveKey: "y",
+    denyKeys: ["escape"],
     bin: "codex",
     wrapper: join(CMUX_BIN, "cmux-codex-wrapper"),
+    integrated: () => existsSync(join(CMUX_BIN, "cmux-codex-wrapper")),
     // Its default is "Trust and continue".
     trust: { prompt: "Trust this folder?", keys: ["enter"] },
     // Its banner draws before the dialog, with the model still "loading",
@@ -148,7 +178,70 @@ export const HARNESSES: Record<Engine, Harness> = {
     renameClosed: (id, _transcript, name) => renameCodexSession(id, name),
     reconnects: false,
   },
+  // Cursor's agent has no cmux wrapper: cmux learns of a chat from the hooks
+  // `cmux hooks cursor install` writes into ~/.cursor/hooks.json, after its
+  // first turn is over. Its prompt box sits indented between two rules, and
+  // its approvals lead their options with the same arrow. A paste shows in
+  // full (a long one folds), and a separate Enter submits it once the box
+  // shows it: cmux ends a paste with a carriage return, which Cursor takes
+  // for a line break, for an Enter, or loses, and an Enter that comes too
+  // soon after is lost. A slash command typed in full is what its menu
+  // picks.
+  cursor: {
+    engine: "cursor",
+    inputLead: "→",
+    inputIndent: 2,
+    boxTop: /^\s*▄{8,}\s*$/,
+    typesMessages: false,
+    typesCommands: true,
+    unsent: inCursorBox,
+    // It showed a paste within 600 ms. A paste that sent itself never
+    // shows, so this is how long sending it waits.
+    shownWaitMs: 3_000,
+    approveKey: "y",
+    // Esc asks what to tell the agent instead, and an empty answer skips
+    // the call, which the agent is told was rejected.
+    denyKeys: ["escape", "enter"],
+    bin: "agent",
+    wrapper: null,
+    integrated: cursorHooked,
+    // Its default is "Trust this workspace".
+    trust: { prompt: "Trust this workspace", keys: ["enter"] },
+    // The banner draws only once the folder is trusted. The dialog says
+    // "Cursor Agent can execute code", never "Cursor Agent" on a line alone.
+    ready: /^\s*Cursor Agent\s*$/m,
+    resumeArgs: (id) => ["--resume", id],
+    // Resuming an id it has never seen starts a chat under it. It titles
+    // the chat itself after the first turn.
+    identify: (id) => ["--resume", id],
+    cmuxAgent: "cursor",
+    markedActive: false,
+    running: runningCursorSessions,
+    keepsOldPid: true,
+    filedOnPrompt: true,
+    // A closed chat's name is in its SQLite store as well as its meta.json,
+    // and resuming it writes the store's back.
+    renameClosed: async () => {
+      throw new Error(
+        "Cursor renames a chat only while it is open: resume it, then rename it",
+      );
+    },
+    reconnects: false,
+    clear: /^\/clear\s*$/,
+  },
 };
+
+// Whether cmux's hooks are in Cursor's hooks.json, which is how cmux learns
+// of a Cursor chat at all.
+function cursorHooked(): boolean {
+  try {
+    return readFileSync(join(homedir(), ".cursor/hooks.json"), "utf8").includes(
+      "hooks enqueue cursor",
+    );
+  } catch {
+    return false;
+  }
+}
 
 // The harness cmux names `agent`, if seamux drives it.
 export function harnessOf(agent: string): Harness | null {
@@ -320,15 +413,22 @@ export class Session {
       await this.until(
         (screen) =>
           unsent(screen, text) || inputArea(screen, this.harness) === null,
-        SHOWN_WAIT_MS,
+        this.harness.shownWaitMs ?? SHOWN_WAIT_MS,
       );
     await this.press("enter");
     if (!unsent) return;
-    for (let tries = 0; ; tries++) {
-      if (await this.until((screen) => !unsent(screen, text), SENT_WAIT_MS))
-        return;
-      if (tries === SUBMIT_RETRIES) throw new UnsentError();
-      await this.keys("\r");
+    try {
+      for (let tries = 0; ; tries++) {
+        if (await this.until((screen) => !unsent(screen, text), SENT_WAIT_MS))
+          return;
+        if (tries === SUBMIT_RETRIES) throw new UnsentError();
+        await this.keys("\r");
+      }
+    } catch (err) {
+      // A command such as /exit can close the terminal it was sent to,
+      // which then has nothing left unsent.
+      if (/not_found/.test((err as Error).message)) return;
+      throw err;
     }
   }
 
@@ -394,15 +494,20 @@ export function exclusive<T>(
 }
 
 // The bottom of the screen from the input line on: the last line led by the
-// harness's own mark, or by "!" in shell mode, through everything under it.
-// A line the box wraps onto is indented, so it never matches. Null when no
-// input line shows, such as while a dialog is open.
+// harness's own mark, or by "!" in shell mode, through everything under it,
+// starting at the mark. A line the box wraps onto is indented further, so it
+// never matches. Null when no input line shows, such as while a dialog is
+// open.
 export function inputArea(screen: string, harness: Harness): string | null {
   const lines = screen.split("\n").map((l) => l.trimEnd());
+  const indent = harness.inputIndent;
   for (let at = lines.length - 1; at >= 0; at--) {
-    const lead = lines[at][0];
-    if (lead === harness.inputLead || lead === "!")
-      return lines.slice(at).join("\n").trimEnd();
+    const line = lines[at];
+    if (line.slice(0, indent).trim()) continue;
+    const lead = line[indent];
+    if (lead !== harness.inputLead && lead !== "!") continue;
+    if (harness.boxTop && !harness.boxTop.test(lines[at - 1] ?? "")) continue;
+    return lines.slice(at).join("\n").slice(indent).trimEnd();
   }
   return null;
 }
@@ -436,6 +541,36 @@ export function endsPromptBox(screen: string, text: string): boolean {
   const box = readPromptBox(screen);
   const tail = Array.from(text.replace(UNSEEN, "")).slice(-20).join("");
   return box !== null && tail.length > 0 && box.text.endsWith(tail);
+}
+
+// Cursor's prompt box: the lines between a rule of ▄ and one of ▀, the
+// first led by "→", or by "!" in shell mode, two columns in. Its text
+// leaves out what UNSEEN matches.
+export function readCursorBox(screen: string): string | null {
+  const lines = screen.split("\n").map((l) => l.trim());
+  let top = lines.length - 1;
+  while (top >= 0 && !/^▄{8,}$/.test(lines[top])) top--;
+  if (top < 0) return null;
+  const bottom = lines.findIndex((l, i) => i > top && /^▀{8,}$/.test(l));
+  const lead = lines[top + 1]?.[0];
+  if (bottom < 0 || (lead !== "→" && lead !== "!")) return null;
+  return lines
+    .slice(top + 1, bottom)
+    .join("")
+    .slice(1)
+    .replace(UNSEEN, "");
+}
+
+// Whether Cursor's prompt box holds `text`: ends with its end, or holds a
+// paste long enough that Cursor folds it into "[Pasted text #1 +3 lines]".
+export function inCursorBox(screen: string, text: string): boolean {
+  const box = readCursorBox(screen);
+  const tail = Array.from(text.replace(UNSEEN, "")).slice(-20).join("");
+  return (
+    box !== null &&
+    tail.length > 0 &&
+    (box.endsWith(tail) || /^\[Pastedtext#\d+/.test(box))
+  );
 }
 
 // The screen as cmux's terminal.replay draws it: each run of text in one

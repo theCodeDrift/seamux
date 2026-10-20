@@ -95,9 +95,9 @@ A row of Claude Code's box is the terminal's width less 2 cells, its first two c
 
 ## Ctrl+E, Ctrl+U and Backspace empty a prompt box a line at a time, in Claude Code and Codex alike
 
-Each typed on its own: Ctrl+E goes to the end of the line, Ctrl+U deletes back to its start, Backspace joins the empty line to the one above, and in an empty box in shell mode leaves it. Sent in one `send_text`, the three did less. None of them stops a running turn, where Esc and Ctrl+C do, and Ctrl+C on an idle chat also shows "Press Ctrl-C again to exit". `send_key` `ctrl+u` did nothing in Claude Code; the typed `\x15` works. Claude Code then shows "Ctrl+Y to paste deleted text". Up on the first line recalls history, so the cursor can't be moved to the end of the box that way. OpenCode's box empties the same way: `clearInput`'s three bytes, typed, emptied four lines in four rounds, where `send_key` `ctrl+u` and `ctrl+c` left them.
+Each typed on its own: Ctrl+E goes to the end of the line, Ctrl+U deletes back to its start, Backspace joins the empty line to the one above, and in an empty box in shell mode leaves it. Sent in one `send_text`, the three did less. None of them stops a running turn, where Esc and Ctrl+C do, and Ctrl+C on an idle chat also shows "Press Ctrl-C again to exit". `send_key` `ctrl+u` did nothing in Claude Code; the typed `\x15` works. Claude Code then shows "Ctrl+Y to paste deleted text". Up on the first line recalls history, so the cursor can't be moved to the end of the box that way. OpenCode's box empties the same way: `clearInput`'s three bytes, typed, emptied four lines in four rounds, where `send_key` `ctrl+u` and `ctrl+c` left them. So does Cursor's, a line a round, and an empty one in shell mode left it in one.
 
-- **Measured:** Claude Code 2.1.286, Codex 0.156.1, cmux 0.64.23; OpenCode 1.18.34, cmux 0.64.25.
+- **Measured:** Claude Code 2.1.286, Codex 0.156.1, cmux 0.64.23; OpenCode 1.18.34, cmux 0.64.25; Cursor Agent 2026.10.18, cmux 0.64.23.
 - **In seamux:** `CLEAR_KEYS` and `clearInput` in [harness.server.ts](../app/lib/harness.server.ts).
 - **See also:** [A prompt box in shell mode](#a-prompt-box-in-shell-mode-runs-what-it-holds-as-shell-commands).
 
@@ -107,14 +107,14 @@ Codex is the other way round from Claude Code. It folds long *typed* input into 
 
 - **Measured:** Codex 0.156.1.
 - **In seamux:** Codex's `typesMessages: false` in [harness.server.ts](../app/lib/harness.server.ts).
-- **See also:** [Typed input that comes too fast is taken for a paste](#typed-input-that-comes-too-fast-is-taken-for-a-paste-and-mangled), [Codex](codex.md), [OpenCode keeps a pasted message whole and submits it](#opencode-keeps-a-pasted-message-whole-and-submits-it-as-codex-does), the same way.
+- **See also:** [`terminal.paste` ends a paste with a carriage return of its own](cmux.md#terminalpaste-ends-a-paste-with-a-carriage-return-of-its-own), the Enter that submits it. [Typed input that comes too fast is taken for a paste](#typed-input-that-comes-too-fast-is-taken-for-a-paste-and-mangled), [Codex](codex.md), [OpenCode keeps a pasted message whole and submits it](#opencode-keeps-a-pasted-message-whole-and-submits-it-as-codex-does), the same way.
 
 ## OpenCode keeps a pasted message whole and submits it, as Codex does
 
 `terminal.paste` of three lines, with no Enter after it, started a turn: OpenCode stored the message with its `\n`s and a trailing space, and showed all three lines. Forty lines, 607 characters, arrived and showed in full, with no placeholder. Typed, the same text loses its line breaks: `cmux send` of `first line\nsecond line` sent the prompt as `first linesecond line`, also with no Enter. So a message for OpenCode wants pasting, as Codex's does.
 
 - **Measured:** OpenCode 1.18.34, cmux 0.64.25.
-- **See also:** [Codex folds long typed input, and shows a paste in full](#codex-folds-long-typed-input-and-shows-a-paste-in-full), [A long paste folds into a placeholder](#a-long-paste-folds-into-a-placeholder-even-on-one-line-and-the-model-gets-it-as-pasted-content) in Claude Code, [OpenCode](opencode.md).
+- **See also:** [`terminal.paste` ends a paste with a carriage return of its own](cmux.md#terminalpaste-ends-a-paste-with-a-carriage-return-of-its-own), the Enter that submits it. [Codex folds long typed input, and shows a paste in full](#codex-folds-long-typed-input-and-shows-a-paste-in-full), [A long paste folds into a placeholder](#a-long-paste-folds-into-a-placeholder-even-on-one-line-and-the-model-gets-it-as-pasted-content) in Claude Code, [OpenCode](opencode.md).
 
 ## Shift+Enter, Alt+Enter and Ctrl+Enter are line breaks in OpenCode, and Ctrl+J is not
 

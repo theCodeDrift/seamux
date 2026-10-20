@@ -24,8 +24,10 @@ export const EDGE: Record<Column, string> = {
 export const CARD_OUTLINE = "ring-0 shadow-none";
 
 // Which agent runs the chat, as its top-right corner: Anthropic's orange for
-// Claude Code, OpenAI's teal for Codex.
+// Claude Code, OpenAI's teal for Codex, Cursor's near-black (cream in dark
+// mode) for Cursor.
 export const ENGINE_CORNER: Record<Engine, string> = {
   claude: "[--corner:var(--engine-claude)]",
   codex: "[--corner:var(--engine-codex)]",
+  cursor: "[--corner:var(--engine-cursor)]",
 };

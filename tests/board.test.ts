@@ -440,6 +440,146 @@ it("keeps a cleared chat drivable while cmux still files it under its old id", a
   }
 });
 
+// A Cursor chat as Cursor 2026.10.18 writes it: the transcript, which
+// cmux names, and meta.json, which has where it runs and its title.
+function cursorChat(id: string, cwd: string, title: string, lines: object[]) {
+  const home = process.env.HOME!;
+  const dir = join(home, ".cursor/projects/work-demo/agent-transcripts", id);
+  mkdirSync(dir, { recursive: true });
+  const transcript = join(dir, `${id}.jsonl`);
+  writeFileSync(
+    transcript,
+    lines.map((l) => JSON.stringify(l) + "\n").join(""),
+  );
+  const chat = join(home, ".cursor/chats/7fc0827fc407a15740f8d2ca9dc8f23c", id);
+  mkdirSync(chat, { recursive: true });
+  writeFileSync(
+    join(chat, "meta.json"),
+    JSON.stringify({ schemaVersion: 1, hasConversation: true, title, cwd }),
+  );
+  return transcript;
+}
+
+const cursorPrompt = (text: string) => ({
+  role: "user",
+  message: {
+    content: [
+      {
+        type: "text",
+        text: `<timestamp>Monday, Oct 19, 2026, 5:43 PM (UTC-7)</timestamp>\n<user_query>\n${text}\n</user_query>`,
+      },
+    ],
+  },
+});
+
+it("reads a Cursor chat from its transcript, meta.json and cmux's hooks", async () => {
+  const cwd = mkdtempSync(join(tmpdir(), "seamux-cursor-"));
+  const id = "bce250b2-cda0-4ca7-9629-49027ae9fc47";
+  const transcript = cursorChat(id, cwd, "Stamp file", [
+    cursorPrompt("Write the time to stamp.txt"),
+    {
+      role: "assistant",
+      message: {
+        content: [
+          { type: "text", text: "I'll write the timestamp." },
+          {
+            type: "tool_use",
+            name: "Shell",
+            input: { command: "date +%s > stamp.txt" },
+          },
+        ],
+      },
+    },
+    {
+      role: "assistant",
+      message: { content: [{ type: "text", text: "Done. Want another?" }] },
+    },
+    { type: "turn_ended", status: "success" },
+  ]);
+  // cmux records ~/.cursor as every Cursor chat's directory.
+  const { surface } = cmux.addSession(id, {
+    agent: "cursor",
+    active_for_surface: false,
+    cwd: join(process.env.HOME!, ".cursor"),
+    transcript_path: transcript,
+    agent_lifecycle: "idle",
+  });
+  try {
+    let card = (await loadBoard()).cards.find((c) => c.sessionId === id);
+    expect(card).toMatchObject({
+      engine: "cursor",
+      name: "Stamp file",
+      cwd,
+      lastPrompt: "Write the time to stamp.txt",
+      lastPromptAt: Date.parse("2026-10-20T00:43:00Z"),
+      lastReply: "Done. Want another?",
+      column: "waiting",
+      drivable: true,
+      waiting: { detail: "Done. Want another?", approval: null },
+    });
+    expect((await loadMessages(id))?.messages).toEqual([
+      {
+        role: "user",
+        text: "Write the time to stamp.txt",
+        at: "2026-10-20T00:43:00.000Z",
+      },
+      {
+        role: "assistant",
+        text: "I'll write the timestamp.",
+        at: "2026-10-20T00:43:00.000Z",
+      },
+      {
+        role: "tools",
+        calls: [{ name: "Shell", count: 1 }],
+        at: "2026-10-20T00:43:00.000Z",
+      },
+      {
+        role: "assistant",
+        text: "Done. Want another?",
+        at: "2026-10-20T00:43:00.000Z",
+      },
+    ]);
+
+    cmux.sessions[0].agent_lifecycle = "running";
+    cmux.writeSessions();
+    card = (await loadBoard()).cards.find((c) => c.sessionId === id);
+    expect(card).toMatchObject({ column: "working", turnRunning: true });
+
+    cmux.sessions[0].agent_lifecycle = "needsInput";
+    cmux.writeSessions();
+    surface.screen = [
+      "─".repeat(40),
+      " $  date +%s > stamp.txt in .",
+      "",
+      " Run this command?",
+      " Hook requested approval • Not in allowlist: date",
+      "  → Run (once) (y)",
+      "    Run Everything (shift+tab)",
+      "    Skip & tell the agent what to do instead (esc or n)",
+    ].join("\n");
+    card = (await loadBoard()).cards.find((c) => c.sessionId === id);
+    expect(card).toMatchObject({
+      column: "waiting",
+      waiting: {
+        reason: "permission prompt",
+        tool: "Shell",
+        detail: "date +%s > stamp.txt",
+        approval: { toolUseId: expect.any(String) },
+      },
+    });
+
+    cmux.endSession(id);
+    card = (await loadBoard()).cards.find((c) => c.sessionId === id);
+    expect(card).toMatchObject({ column: "done", name: "Stamp file", cwd });
+  } finally {
+    rmSync(join(process.env.HOME!, ".cursor"), {
+      recursive: true,
+      force: true,
+    });
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 it("takes a task notification after its answered hand-back as no turn", async () => {
   // As Claude Code 2.1.289 logs a subagent's return: the <agent-message>
   // hand-back wakes the model, and the task notification for the same run

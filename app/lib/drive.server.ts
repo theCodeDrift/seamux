@@ -18,6 +18,7 @@ import {
 } from "./board.ts";
 import { forgetCommands } from "./commands.server.ts";
 import { parseCodexApproval } from "./codex.server.ts";
+import { parseCursorApproval } from "./cursor.server.ts";
 import {
   ENGINE_LABELS,
   dropVariable,
@@ -71,6 +72,8 @@ interface CmuxSession {
   workspace_id: string;
   cwd?: string;
   transcript_path?: string | null;
+  agent_lifecycle?: string;
+  started_at?: string;
 }
 
 // A session running in a cmux surface, which the board can type into.
@@ -78,18 +81,30 @@ export interface LiveSession {
   engine: Engine;
   surface: Surface;
   cwd: string | null;
-  // Codex only: cmux records where its transcript is.
+  // Not Claude Code: cmux records where its transcript is.
   transcript: string | null;
+  // What cmux's hooks last said of it: "running", "needsInput", "idle".
+  lifecycle: string | null;
 }
 
 // A resumed session of a harness cmux files only once a prompt goes in
-// stays under its old surface until then, so seamux remembers where it
-// resumed it until cmux catches up. Kept on globalThis, so a hot reload
-// doesn't forget it.
-const resumedUnfiled = ((globalThis as any).__seamuxResumedUnfiled ??= new Map<
+// stays under its old surface until then, and a new one started under an id
+// seamux picked is under none until cmux files it, so seamux remembers where
+// it launched each until cmux catches up. Kept on globalThis, so a hot
+// reload doesn't forget it.
+const unfiled = ((globalThis as any).__seamuxUnfiled ??= new Map<
   string,
-  { engine: Engine; surface: Surface }
->()) as Map<string, { engine: Engine; surface: Surface }>;
+  Unfiled
+>()) as Map<string, Unfiled>;
+
+interface Unfiled {
+  engine: Engine;
+  surface: Surface;
+  launchedAt: number;
+}
+
+// cmux lists a new workspace a moment after workspace.create returns.
+const LISTED_GRACE_MS = 10_000;
 
 // pid -> where a live session's process was last seen in cmux, and when.
 // cmux drops a cleared chat's old record a moment before it files the new
@@ -120,7 +135,9 @@ export interface Wanted {
 // under its old id in cmux for a moment, then under none, so each of
 // `want` cmux doesn't list is found by its process: the live session with
 // the same pid, or the one last seen with it a moment ago, the pid from
-// the caller or the harness's own list.
+// the caller or the harness's own list. A harness cmux never marks active
+// leaves the old record live beside the new one, on the same pid, so the one
+// cmux started last is the chat that runs there.
 export async function listLive(
   want: Wanted[] = [],
 ): Promise<Map<string, LiveSession>> {
@@ -133,36 +150,53 @@ export async function listLive(
     if (!asked.has(h)) asked.set(h, h.running!());
     return asked.get(h)!;
   };
+  // cmux lost the pid, or keeps a resumed session's old one.
+  const pidUnknown = (s: CmuxSession, h: Harness) =>
+    s.stored_pid_exists == null || (!s.stored_pid_exists && !!h.keepsOldPid);
   const pidless = new Set(
     sessions.flatMap((s) => {
       const h = harnessOf(s.agent);
-      return h?.running && s.active_for_surface && s.stored_pid_exists == null
+      return h?.running &&
+        (s.active_for_surface || !h.markedActive) &&
+        pidUnknown(s, h)
         ? [h]
         : [];
     }),
   );
-  const running = new Set(
+  const running = new Map(
     (await Promise.all([...pidless].map(runningFor))).flatMap((ids) => [
-      ...ids.keys(),
+      ...ids,
     ]),
   );
   const map = new Map<string, LiveSession>();
   const byPid = new Map<number, LiveSession>();
+  // pid -> the session started last on it, of a harness cmux never marks.
+  const newest = new Map<number, { id: string; startedAt: string }>();
   for (const s of sessions) {
     const harness = harnessOf(s.agent);
     if (!harness) continue;
     if (harness.markedActive && !s.active_for_surface) continue;
-    if (s.stored_pid_exists == null) {
+    let pid = s.pid ?? null;
+    if (pidUnknown(s, harness)) {
       if (!harness.running || !running.has(s.session_id)) continue;
+      pid = running.get(s.session_id)!;
     } else if (!s.stored_pid_exists || pidReused(s)) continue;
     const live: LiveSession = {
       engine: harness.engine,
       surface: { surfaceId: s.surface_id, workspaceId: s.workspace_id },
       cwd: s.cwd ?? null,
       transcript: s.transcript_path ?? null,
+      lifecycle: s.agent_lifecycle ?? null,
     };
+    if (pid != null && !harness.markedActive) {
+      const started = s.started_at ?? "";
+      const before = newest.get(pid);
+      if (before && before.startedAt >= started) continue;
+      if (before) map.delete(before.id);
+      newest.set(pid, { id: s.session_id, startedAt: started });
+    }
     map.set(s.session_id, live);
-    if (s.pid != null) byPid.set(s.pid, live);
+    if (pid != null) byPid.set(pid, live);
   }
   const now = Date.now();
   for (const [pid, seen] of lastSeen) {
@@ -183,21 +217,30 @@ export async function listLive(
     const live = found != null ? lastSeen.get(found)?.live : undefined;
     if (live) map.set(sessionId, live);
   }
-  if (resumedUnfiled.size > 0) {
+  if (unfiled.size > 0) {
     const { workspaces } = await rpc<{ workspaces: { id: string }[] }>(
       "workspace.list",
       {},
     );
-    for (const [id, { engine, surface }] of resumedUnfiled) {
+    for (const [id, { engine, surface, launchedAt }] of unfiled) {
       const filed = sessions.find((s) => s.session_id === id);
       if (filed?.surface_id === surface.surfaceId) {
-        resumedUnfiled.delete(id);
-      } else if (!workspaces.some((w) => w.id === surface.workspaceId)) {
+        unfiled.delete(id);
+      } else if (
+        !workspaces.some((w) => w.id === surface.workspaceId) &&
+        now - launchedAt > LISTED_GRACE_MS
+      ) {
         // Exited before its first prompt: its workspace closed with it.
-        resumedUnfiled.delete(id);
+        unfiled.delete(id);
         map.delete(id);
       } else {
-        map.set(id, { engine, surface, cwd: null, transcript: null });
+        map.set(id, {
+          engine,
+          surface,
+          cwd: null,
+          transcript: null,
+          lifecycle: null,
+        });
       }
     }
   }
@@ -448,6 +491,10 @@ export async function readDialog(surface: Surface): Promise<Dialog | null> {
 
 export async function readCodexApproval(surface: Surface) {
   return parseCodexApproval(await readScreen(surface));
+}
+
+export async function readCursorApproval(surface: Surface) {
+  return parseCursorApproval(await readScreen(surface));
 }
 
 // Pick an option in the dialog read as `key`. Measured against Claude Code
@@ -746,16 +793,17 @@ async function finishClose(
 // hand gets (npx, pnpm, brew's tools). The command re-runs itself in an
 // interactive instance of the user's own shell, which reads its startup
 // files. Launch through cmux's own wrapper for the agent, which registers
-// the session with cmux (so the board can find its surface), and put the
-// agents' install directories first on PATH, in case those files do not.
+// the session with cmux (so the board can find its surface), or the agent
+// itself where cmux's hooks register it instead, and put the agents' install
+// directories first on PATH, in case those files do not.
 
-// Which agents this Mac can launch: cmux's wrapper for it, and the agent
-// itself where a launch would look.
+// Which agents this Mac can launch: cmux's wrapper or hooks for it, and the
+// agent itself where a launch would look.
 export function installedEngines(): Record<Engine, boolean> {
   return Object.fromEntries(
     ENGINES.map((e) => [
       e,
-      existsSync(HARNESSES[e].wrapper) && findBin(HARNESSES[e].bin) !== null,
+      HARNESSES[e].integrated() && findBin(HARNESSES[e].bin) !== null,
     ]),
   ) as Record<Engine, boolean>;
 }
@@ -778,7 +826,7 @@ async function launch(
       initial_command: `exec ${shq(SHELL)} -ic ${shq(
         [
           `PATH=${BIN_DIRS.map(shq).join(":")}:"$PATH"`,
-          shq(harness.wrapper),
+          shq(harness.wrapper ?? harness.bin),
           ...args.map(shq),
         ].join(" "),
       )}`,
@@ -844,7 +892,7 @@ export async function resume(
     const args = HARNESSES[engine].resumeArgs(sessionId);
     const surface = await launch(engine, cwd, title, args, true);
     if (HARNESSES[engine].filedOnPrompt)
-      resumedUnfiled.set(sessionId, { engine, surface });
+      unfiled.set(sessionId, { engine, surface, launchedAt: Date.now() });
   } catch (err) {
     resuming.delete(sessionId);
     throw err;
@@ -1232,13 +1280,15 @@ export async function dispatch(input: DispatchInput): Promise<string> {
   }
   const sessionId = randomUUID();
   record(sessionId);
-  await launch(
+  const surface = await launch(
     engine,
     where,
     name,
     [...identify(sessionId, name), first],
     false,
   );
+  if (HARNESSES[engine].filedOnPrompt)
+    unfiled.set(sessionId, { engine, surface, launchedAt: Date.now() });
   return sessionId;
 }
 

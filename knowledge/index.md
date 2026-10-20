@@ -1,6 +1,6 @@
 # What seamux knows
 
-seamux stands on tools it doesn't own: Claude Code, Codex, cmux, cloudflared, macOS, Vite and React Router. Their documentation, and what anyone would assume of them, turned out wrong often enough that seamux trusts only what it has measured. This collection is that record: what each tool actually does, which version showed it, and what seamux does about it.
+seamux stands on tools it doesn't own: Claude Code, Codex, Cursor, cmux, cloudflared, macOS, Vite and React Router. Their documentation, and what anyone would assume of them, turned out wrong often enough that seamux trusts only what it has measured. This collection is that record: what each tool actually does, which version showed it, and what seamux does about it.
 
 Read the domain before you touch the code that leans on it. When a tool surprises you, write it down here before you write the fix.
 
@@ -20,6 +20,7 @@ Read the domain before you touch the code that leans on it. When a tool surprise
 | [Slash commands](slash-commands.md) | Listing a chat's slash commands, and why the slash menu isn't the way |
 | [Names](names.md) | Renaming chats and workspaces, in Claude Code, Codex and cmux |
 | [Codex](codex.md) | Everything Codex does differently, from its transcripts to its approvals |
+| [Cursor](cursor.md) | Cursor's `agent` CLI: cmux's hooks for it, its transcripts and `meta.json`, its prompt box, approvals and resumes |
 | [OpenCode](opencode.md) | Measured before its engine: how cmux registers it, its SQLite sessions and subagents, its HTTP server, and how it compares with Claude Code and Codex |
 | [Signing in](signing-in.md) | Detecting an expired login and signing Claude Code or Codex in without a terminal |
 | [Cloudflare Tunnel](cloudflare-tunnel.md) | cloudflared, its hostname, and Cloudflare Access |

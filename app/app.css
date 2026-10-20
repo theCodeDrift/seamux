@@ -71,7 +71,6 @@
   --color-column-pinned: var(--column-pinned);
   --color-column-attention: var(--column-attention);
   --color-line-highlight: var(--line-highlight);
-  --color-engine-foreground: var(--engine-foreground);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -121,10 +120,13 @@
   --scrollbar-thumb: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
   --scrollbar-thumb-hover: oklch(from var(--scrollbar-thumb) calc(l - 0.1) c h);
   /* Each service's own colour: Anthropic's clay for Claude Code, OpenAI's
-     teal for Codex, and text on either. */
+     teal for Codex, and text on either; Cursor Dark for Cursor, with Cursor
+     Cream on it, the two swapped in dark mode. */
   --engine-claude: #d97757;
   --engine-codex: #4ba281;
   --engine-foreground: #fff;
+  --engine-cursor: #26251e;
+  --engine-cursor-foreground: #f2f1ed;
   /* The project colours, in picker order: twelve bright, saturated hues.
      Evenly spaced hues crowd the cool end, where cyan, blue and purple sit
      close together, so these are picked by hand: blue, violet and magenta
@@ -178,6 +180,8 @@
 }
 
 .dark {
+  --engine-cursor: #f2f1ed;
+  --engine-cursor-foreground: #26251e;
   --warning-text: oklch(82.8% 0.189 84.429);
   --line-highlight: oklch(87.9% 0.169 91.605 / 20%);
   --scrollbar-thumb-hover: oklch(from var(--scrollbar-thumb) calc(l + 0.1) c h);

@@ -1,6 +1,7 @@
 // Derives the board from the running tools. Nothing here writes anywhere:
 // Claude Code's session state comes from `claude agents --json`, Codex's
-// from cmux and its transcripts (codex.server.ts), and card content from
+// from cmux and its transcripts (codex.server.ts), Cursor's from cmux's
+// hooks and its chats on disk (cursor.server.ts), and card content from
 // the transcripts on disk. If this ever disagrees with the tools, the tools
 // win.
 
@@ -40,6 +41,15 @@ import {
   type CodexSummary,
   type CodexTranscript,
 } from "./codex.server";
+import {
+  cursorChats,
+  indexCursorTranscripts,
+  loadCursorMessages,
+  summarizeCursor,
+  type CursorChat,
+  type CursorSummary,
+  type CursorTranscript,
+} from "./cursor.server";
 import { listingPids } from "./commands.server";
 import { ENGINES, type Engine } from "./config";
 import { configOrDefaults } from "./config.server";
@@ -47,6 +57,7 @@ import {
   closingState,
   listLive,
   readCodexApproval,
+  readCursorApproval,
   readDialog,
   readDraft,
   restarting,
@@ -543,6 +554,15 @@ const READERS: Record<Engine, TranscriptReader> = {
     },
     messages: loadCodexMessages,
   },
+  // Cursor keeps where a chat runs and its title in the chat's meta.json.
+  cursor: {
+    index: indexCursorTranscripts,
+    info: async (id) => {
+      const chat = (await cursorChats()).get(id);
+      return chat?.cwd ? { cwd: chat.cwd, name: chat.title } : null;
+    },
+    messages: loadCursorMessages,
+  },
 };
 
 // Each harness's transcripts in turn, in the order ENGINES lists them.
@@ -876,34 +896,44 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
   // them, chats can be missing from the board while they still run.
   let agentsKnown = true;
 
-  const [agents, attached, workspaces, transcripts, codexTranscripts, names] =
-    await Promise.all([
-      // No Claude Code installed is a board of Codex sessions, not an error.
-      listAgents().catch((err: NodeJS.ErrnoException) => {
-        if (err.code !== "ENOENT") {
-          agentsKnown = false;
-          warnings.push(`Claude Code sessions unknown: ${err.message}`);
-        }
-        return [] as AgentRow[];
-      }),
-      attachedTo().catch((err) => {
+  const [
+    agents,
+    attached,
+    workspaces,
+    transcripts,
+    codexTranscripts,
+    names,
+    cursorTranscripts,
+    chats,
+  ] = await Promise.all([
+    // No Claude Code installed is a board of Codex sessions, not an error.
+    listAgents().catch((err: NodeJS.ErrnoException) => {
+      if (err.code !== "ENOENT") {
         agentsKnown = false;
-        warnings.push(`Attached sessions unknown: ${err.message}`);
-        return null;
-      }),
-      cmuxWorkspaces().catch((err) => {
-        cmux ??= cmuxTrouble(err);
-        if (!cmux) {
-          warnings.push(
-            `cmux unavailable, workspace refs missing: ${err.message}`,
-          );
-        }
-        return [] as Workspace[];
-      }),
-      indexTranscripts(),
-      indexCodexTranscripts(),
-      codexNames().catch(() => new Map<string, string>()),
-    ]);
+        warnings.push(`Claude Code sessions unknown: ${err.message}`);
+      }
+      return [] as AgentRow[];
+    }),
+    attachedTo().catch((err) => {
+      agentsKnown = false;
+      warnings.push(`Attached sessions unknown: ${err.message}`);
+      return null;
+    }),
+    cmuxWorkspaces().catch((err) => {
+      cmux ??= cmuxTrouble(err);
+      if (!cmux) {
+        warnings.push(
+          `cmux unavailable, workspace refs missing: ${err.message}`,
+        );
+      }
+      return [] as Workspace[];
+    }),
+    indexTranscripts(),
+    indexCodexTranscripts(),
+    codexNames().catch(() => new Map<string, string>()),
+    indexCursorTranscripts(),
+    cursorChats(),
+  ]);
   let liveKnown = true;
   // Each chat by its process too, so one cleared a moment ago keeps its
   // surface while cmux catches up with its new id.
@@ -1060,6 +1090,14 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
         names,
         workspaces,
       ),
+    cursor: (sessionId, l) =>
+      cursorCard(
+        sessionId,
+        l,
+        cursorTranscripts.get(sessionId),
+        chats,
+        workspaces,
+      ),
   };
   const cmuxCards = await Promise.all(
     [...live].flatMap(([sessionId, l]) => {
@@ -1103,6 +1141,9 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
         .map(async (e) => ((await isChatTranscript(e[1].path)) ? e : null)),
     )
   ).filter((e) => e != null);
+  const recentCursor = [...cursorTranscripts.entries()].filter(([id, t]) =>
+    shown(id, t),
+  );
   const doneCards = await Promise.all(
     recent.map(async ([sessionId, t]): Promise<Card> => {
       const s = await summarize(t.path);
@@ -1153,7 +1194,21 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
     }),
   );
 
-  const cards = [...liveCards, ...doneCards, ...codexDone];
+  const cursorDone = await Promise.all(
+    recentCursor.map(async ([sessionId, t]) => {
+      const s = await summarizeCursor(t.path);
+      const cwd = chats.get(sessionId)?.cwd ?? null;
+      return {
+        ...cursorFields(sessionId, s, t, chats),
+        column: "done" as const,
+        branch: await branchOf(cwd),
+        turnRunning: false,
+        waiting: null,
+      };
+    }),
+  );
+
+  const cards = [...liveCards, ...doneCards, ...codexDone, ...cursorDone];
   for (const card of cards) {
     card.pinned = pinned.has(card.sessionId);
     card.clearedFrom =
@@ -1203,7 +1258,11 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
   // Without both sources, a worker missing from them may still run.
   const alive: Alive = agentsKnown && liveKnown ? (id) => !closed(id) : null;
   const lastWrite = (id: string) =>
-    (transcripts.get(id) ?? codexTranscripts.get(id))?.mtimeMs ?? null;
+    (
+      transcripts.get(id) ??
+      codexTranscripts.get(id) ??
+      cursorTranscripts.get(id)
+    )?.mtimeMs ?? null;
   const dispatches = loadDispatchSets(now, alive, lastWrite, warnings);
   for (const card of cards) {
     card.fanouts = dispatches.filter(
@@ -1331,6 +1390,115 @@ async function codexCard(
     ...codexFields(sessionId, s, t, names),
     column: waiting ? "waiting" : busy ? "working" : "idle",
     branch: await branchOf(s.cwd),
+    workspaceRef:
+      workspaces.find((w) => w.id === live.surface.workspaceId)?.ref ?? null,
+    drivable: true,
+    turnRunning: busy,
+    waiting,
+    closing: closingState(sessionId, { lastPrompt: s.lastPrompt }),
+  };
+}
+
+// What a Cursor card shares whether it is live or closed.
+function cursorFields(
+  sessionId: string,
+  s: CursorSummary,
+  t: CursorTranscript | undefined,
+  chats: Map<string, CursorChat>,
+): Omit<Card, "column" | "branch" | "turnRunning" | "waiting"> {
+  const chat = chats.get(sessionId);
+  return {
+    sessionId,
+    engine: "cursor",
+    name: chat?.title ?? sessionId.slice(0, 8),
+    cwd: chat?.cwd ?? "",
+    lastActivityAt: t?.mtimeMs ?? null,
+    lastPrompt: s.lastPrompt,
+    lastPromptAt: s.lastPromptAt,
+    lastReply: s.lastReply,
+    // Cursor's transcript records no usage.
+    context: null,
+    terminalQueue: [],
+    unsentDraft: null,
+    sendFailure: failureFor(sessionId),
+    boardQueue: [],
+    workspaceRef: null,
+    intent: null,
+    forkedFrom: null,
+    worker: null,
+    fanouts: [],
+    drivable: false,
+    pinned: false,
+    clearedFrom: null,
+    apiError: null,
+    closing: null,
+    background: [],
+    subagents: [],
+  };
+}
+
+// A live Cursor chat. cmux's hooks say whether a turn runs or waits on an
+// approval, which is read off the screen; the transcript can't, since a
+// turn writes nothing until it has something to show. cmux files a new chat
+// only once its first turn is over.
+async function cursorCard(
+  sessionId: string,
+  live: LiveSession,
+  indexed: CursorTranscript | undefined,
+  chats: Map<string, CursorChat>,
+  workspaces: Workspace[],
+): Promise<Card> {
+  let t = indexed;
+  if (live.transcript && !t) {
+    try {
+      t = {
+        path: live.transcript,
+        mtimeMs: (await stat(live.transcript)).mtimeMs,
+      };
+    } catch {}
+  }
+  const s: CursorSummary = t
+    ? await summarizeCursor(t.path)
+    : {
+        lastPrompt: null,
+        lastPromptAt: null,
+        lastReply: null,
+        finalReply: null,
+        turnEnded: false,
+      };
+  // A chat cmux hasn't filed yet has no lifecycle: one seamux just started
+  // runs its first turn, and one it resumed waits for a prompt.
+  const busy =
+    live.lifecycle === "running" || (live.lifecycle === null && !s.turnEnded);
+  let waiting: Waiting | null = null;
+  if (live.lifecycle === "needsInput") {
+    const approval = await readCursorApproval(live.surface).catch(() => null);
+    waiting = {
+      reason: "permission prompt",
+      tool: approval?.tool ?? null,
+      detail: approval?.detail ?? null,
+      ask: null,
+      approval: approval
+        ? { toolUseId: `${approval.title}\n${approval.detail ?? ""}` }
+        : null,
+      dialog: null,
+    };
+  } else if (!busy) {
+    const question = endingQuestionIn(s.finalReply);
+    if (question)
+      waiting = {
+        reason: ASKED_IN_REPLY,
+        tool: null,
+        detail: question,
+        ask: null,
+        approval: null,
+        dialog: null,
+      };
+  }
+  return {
+    ...cursorFields(sessionId, s, t, chats),
+    column: waiting ? "waiting" : busy ? "working" : "idle",
+    branch: await branchOf(chats.get(sessionId)?.cwd ?? null),
     workspaceRef:
       workspaces.find((w) => w.id === live.surface.workspaceId)?.ref ?? null,
     drivable: true,

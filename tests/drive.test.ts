@@ -114,12 +114,71 @@ describe("listLive", () => {
       },
       cwd: "/work/a",
       transcript: null,
+      lifecycle: null,
     });
     expect(live.get("codex-live")).toMatchObject({
       engine: "codex",
       transcript: "/codex/rollout.jsonl",
     });
     expect(live.get("codex-live")!.surface.surfaceId).toBe(codex.surface.id);
+  });
+
+  // After /clear, Cursor goes on in the same process under a new id, and
+  // cmux keeps the old record beside the new one, both on its pid.
+  it("lists only the Cursor chat cmux started last on a process", async () => {
+    const cursor = {
+      agent: "cursor",
+      active_for_surface: false,
+      pid: process.pid,
+    };
+    cmux.addSession("cursor-before-clear", {
+      ...cursor,
+      started_at: "2026-10-20T00:43:40.090Z",
+    });
+    cmux.addSession("cursor-after-clear", {
+      ...cursor,
+      started_at: "2026-10-20T00:48:47.088Z",
+      agent_lifecycle: "running",
+    });
+    const live = await listLive();
+    expect([...live.keys()]).toEqual(["cursor-after-clear"]);
+    expect(live.get("cursor-after-clear")).toMatchObject({
+      engine: "cursor",
+      lifecycle: "running",
+    });
+  });
+
+  // cmux moves a resumed Cursor chat to its new surface but keeps the pid it
+  // had before, so its own process says whether it runs.
+  it("counts a resumed Cursor chat live while its process runs", async () => {
+    const id = "bce250b2-cda0-4ca7-9629-49027ae9fc47";
+    cmux.addSession(id, {
+      agent: "cursor",
+      active_for_surface: false,
+      pid: 80782,
+      stored_pid_exists: false,
+    });
+    cmux.addSession("2b0e7a51-0c5e-4d0e-9a1b-7f3c2d9e8a61", {
+      agent: "cursor",
+      active_for_surface: false,
+      stored_pid_exists: false,
+    });
+    const path = process.env.PATH;
+    const bin = mkdtempSync(join(tmpdir(), "seamux-ps-"));
+    writeFileSync(
+      join(bin, "ps"),
+      `#!/bin/sh
+echo "29287 /Users/me/.local/bin/agent --use-system-ca /Users/me/.local/share/cursor-agent/versions/2026.10.19-6bbf2c4/index.js --resume ${id}"
+`,
+      { mode: 0o755 },
+    );
+    process.env.PATH = `${bin}:${path}`;
+    try {
+      expect([...(await listLive()).keys()]).toEqual([id]);
+    } finally {
+      process.env.PATH = path;
+      rmSync(bin, { recursive: true, force: true });
+    }
   });
 
   it("finds a chat cmux still files under its id from before /clear", async () => {
@@ -568,6 +627,46 @@ describe("sendMessage", () => {
     expect(input(surface)).toEqual(["paste:short", "key:enter"]);
   });
 
+  it("always pastes into Cursor, then presses Enter", async () => {
+    const { surface } = cmux.addSession("s", {
+      agent: "cursor",
+      active_for_surface: false,
+    });
+    await sendMessage("s", "first\nsecond");
+    expect(input(surface)).toEqual(["paste:first\nsecond", "key:enter"]);
+  });
+
+  // Cursor's prompt box is indented under a rule, and its approvals lead
+  // their options with the same arrow.
+  it("empties Cursor's prompt box, and leaves an approval alone", async () => {
+    const rule = " " + "▄".repeat(40);
+    const { surface } = cmux.addSession("s", {
+      agent: "cursor",
+      active_for_surface: false,
+    });
+    const box = (text: string) =>
+      `  pong\n${rule}\n  → ${text}\n ${"▀".repeat(40)}\n  Auto · 4.7%`;
+    surface.screen = box("a draft");
+    cmux.onInput((s, i) => {
+      if (s !== surface) return;
+      if (i.value === "\x15" || i.value === "enter")
+        surface.screen = box("Add a follow-up");
+      if (i.kind === "paste") surface.screen = box(i.value);
+    });
+    await sendMessage("s", "hi");
+    expect(input(surface)[0]).toBe("text:\x05");
+    expect(input(surface).slice(-2)).toEqual(["paste:hi", "key:enter"]);
+
+    const approving = cmux.addSession("a", {
+      agent: "cursor",
+      active_for_surface: false,
+    });
+    approving.surface.screen =
+      " $  date in .\n Run this command?\n  → Run (once) (y)\n    Run Everything (shift+tab)\n    Skip & tell the agent what to do instead (esc or n)";
+    await sendMessage("a", "hi");
+    expect(input(approving.surface)).toEqual(["paste:hi", "key:enter"]);
+  });
+
   it("sends Session information again after a /clear", async () => {
     const { surface } = cmux.addSession("s");
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), "seamux-clear-")));
@@ -645,6 +744,25 @@ describe("answerApproval", () => {
     });
     await answerApproval("s", true, "codex");
     expect(input(surface)).toEqual(["text:y"]);
+  });
+
+  it("approves Cursor with y", async () => {
+    const { surface } = cmux.addSession("s", {
+      agent: "cursor",
+      active_for_surface: false,
+    });
+    await answerApproval("s", true, "cursor");
+    expect(input(surface)).toEqual(["text:y"]);
+  });
+
+  // Esc asks what to tell the agent instead, and an empty answer skips.
+  it("denies Cursor with Esc, then Enter on the empty answer", async () => {
+    const { surface } = cmux.addSession("s", {
+      agent: "cursor",
+      active_for_surface: false,
+    });
+    await answerApproval("s", false, "cursor");
+    expect(input(surface)).toEqual(["key:escape", "key:enter"]);
   });
 
   it("denies with Esc, since No has no fixed number", async () => {
@@ -1011,6 +1129,37 @@ describe("dispatch", () => {
     cmux.writeSessions();
     expect(await started).toBe("codex-picked");
   });
+
+  // Cursor has no cmux wrapper: cmux's hooks register it, so it is launched
+  // as itself. Resuming an id it has never seen starts a chat under it, and
+  // cmux files the chat only once its first turn is over, so until then it
+  // is live where seamux launched it. It stops on a trust dialog whose
+  // default trusts.
+  it("launches Cursor as itself under an id seamux picked", async () => {
+    const started = dispatch({ cwd: dir(), engine: "cursor", prompt: "Hi" });
+    await vi.waitFor(() =>
+      expect(cmux.calls("workspace.create")).toHaveLength(1),
+    );
+    const command = String(
+      cmux.calls("workspace.create")[0].params.initial_command,
+    );
+    expect(command).toContain("'\\''agent'\\''");
+    expect(command).not.toContain("wrapper");
+    const sessionId = await started;
+    expect(command).toContain(`--resume'\\'' '\\''${sessionId}`);
+    const workspace = cmux.workspaces.at(-1)!;
+    const created = workspace.surfaces[0];
+    expect((await listLive()).get(sessionId)).toMatchObject({
+      engine: "cursor",
+      surface: { surfaceId: created.id },
+      lifecycle: null,
+    });
+    created.screen =
+      "  │  ⚠ Workspace Trust Required\n  │  Cursor Agent can execute code and access files in this directory.\n  │  ▶ [a] Trust this workspace\n  │    [q] Quit";
+    await vi.waitFor(() => expect(input(created)).toEqual(["key:enter"]), {
+      timeout: 5_000,
+    });
+  });
 });
 
 describe("fork", () => {
@@ -1056,6 +1205,15 @@ describe("resume", () => {
     const live = (await listLive()).get("codex-old");
     expect(live).toMatchObject({ engine: "codex" });
     expect(live!.surface.surfaceId).toBe(created.surfaces[0].id);
+  });
+
+  it("resumes a Cursor chat with --resume", async () => {
+    await resume("cursor-old", "/tmp", "old chat", "cursor");
+    const command = String(
+      cmux.calls("workspace.create")[0].params.initial_command,
+    );
+    expect(command).toContain("--resume");
+    expect(command).toContain("cursor-old");
   });
 });
 

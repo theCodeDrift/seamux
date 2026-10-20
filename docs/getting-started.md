@@ -7,6 +7,7 @@ This page covers installing seamux, running the board, and every setting it has.
 - **macOS** with [cmux](https://cmux.dev), in `/Applications` or `~/Applications` (or set `SEAMUX_CMUX_APP`), and its `cmux` command on your `PATH`. seamux drives sessions by typing into their cmux terminals, so a session outside cmux is shown but can't be driven.
 - **Claude Code**, with `claude` on your `PATH` (`~/.local/bin` is where the installer puts it).
 - **Codex**, optionally, installed with npm or pnpm (next to `node`) or Homebrew. Run `cmux hooks setup codex` once so cmux tracks its sessions.
+- **Cursor**, optionally: its `agent` command, which Cursor's installer puts in `~/.local/bin`. Run `cmux hooks cursor install` once so cmux tracks its chats; cmux has no wrapper for Cursor, so until then the board greys it out.
 - **Node 24** or later, for `node:sqlite`, and in a clone for running TypeScript directly.
 - **A shell whose startup files set up your `PATH`.** Every session seamux starts runs in an interactive instance of your login shell (`$SHELL`), so it gets the same tools a terminal opened by hand does. zsh and bash are tested.
 
@@ -75,7 +76,7 @@ Most settings live in the board. Click the cog beside the seamux name.
 
 <!-- Screenshot: the General tab -->
 
-- **Default agent**: what the dispatch bar starts new sessions with, Claude Code or Codex. An agent that isn't installed is greyed out. The dispatch bar has a picker to change it for one dispatch. Fan-out workers always run Claude Code, since they rely on its hooks and the dispatch skill.
+- **Default agent**: what the dispatch bar starts new sessions with, Claude Code, Codex or Cursor. An agent that isn't installed is greyed out. The dispatch bar has a picker to change it for one dispatch. Fan-out workers always run Claude Code, since they rely on its hooks and the dispatch skill.
 - **Worktrees**: whether the dispatch bar's "new worktree" switch starts on.
 - **Notifications**: desktop notifications when a chat starts waiting while the board isn't the focused window. Turning it on asks the browser for permission and then sends a test notification, "Desktop Notifications are Enabled", and the choice is kept in this browser rather than the store. Browsers only allow notifications on a secure origin, so the switch is greyed out on the plain-HTTP `.local` address.
 - **Directories**: what the dispatch bar's directory picker offers. When this is empty, the picker lists directories with live sessions, past dispatches, and every git repo up to two levels under the usual code folders in your home directory (`~/code`, `~/Developer`, `~/projects`, `~/src` and a few more). Any directory can be added or dispatched into, inside your home directory or not. ↓ or the chevron opens the whole list, whatever is already in the field; typing narrows it. Tab completes a partly typed path as a shell does, from that list and from the directories on disk: all the way when only one directory fits, otherwise as far as every fitting directory agrees, then opens the list of them.
@@ -113,7 +114,7 @@ A theme repaints the board, on every browser that has it open. Pick one from the
 
 - A variant needs only `--brand-primary` and `--brand-secondary`. The board works out the rest of its palette from them: in light, a near-white ground tinted with the brand; in dark, a very dark one. Anything else you set replaces what was worked out.
 - Leave a variant empty and it's made from the other's brand colours.
-- Colours are hex, `rgb()`, `hsl()`, `oklch()`, `oklab()` or `transparent`; `--radius` is 0 to 4rem or 0 to 64px. Every colour token in `app/app.css` can be set except the two engine colours, Claude Code's and Codex's. Anything else is refused when you save, with where and why.
+- Colours are hex, `rgb()`, `hsl()`, `oklch()`, `oklab()` or `transparent`; `--radius` is 0 to 4rem or 0 to 64px. Every colour token in `app/app.css` can be set except the engines' colours, Claude Code's, Codex's and Cursor's. Anything else is refused when you save, with where and why.
 - Three tokens take an image: `--background-image`, behind the whole page; `--input-image`, behind every text box (the dispatch box, each card's reply line, and the chat's reply box); and `--watermark-image`, fitted into the bottom-right corner behind the board, smaller on a phone, as strong as `--watermark-opacity` (0 to 1 or 0% to 100%, 0.2 unless you set it). An image is a `data:` URL of a PNG, JPEG, WebP, GIF or SVG of at most 100 kB, base64 or percent-encoded; anything that would load from a server is refused. Each variant sets its own, so dark can use a different picture.
 - Saving keeps the values as numbers, so the editor shows them back in a standard form: `oklch(56% 0.19 272)` comes back as `oklch(0.56 0.19 272)`.
 - **Export**, under the `⋯`, saves a theme as `<name>.seamux-theme.json` to share. **Import**, below the list, opens one as a new theme for you to look over and save; tokens this seamux doesn't know, from a newer one, are left out and listed. A theme file is the theme's name, label and variants under `"seamux-theme": 1`.

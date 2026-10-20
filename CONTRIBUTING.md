@@ -4,7 +4,7 @@ Issues and pull requests are welcome. For anything bigger than a fix, open an is
 
 ## Proposing a change
 
-seamux is a board over cmux: it reads what cmux, Claude Code and Codex already record, and drives sessions through cmux. A proposal fits when it:
+seamux is a board over cmux: it reads what cmux, Claude Code, Codex and Cursor already record, and drives sessions through cmux. A proposal fits when it:
 
 - **Meets a distinct need.** Say what you can't do today, or what the board doesn't show. A need described well is worth more than a solution.
 - **Reworks the board rather than bolting onto it.** If a feature doesn't fit the board as it is, propose how the board should change to hold it, rather than adding a mode, a toggle or a second kind of card beside what's there.

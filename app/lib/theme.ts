@@ -14,8 +14,8 @@ import { z } from "zod";
 // Every token a theme may set, and what kind of value it takes. Allowlist,
 // never denylist: tests/theme.test.ts checks this against app.css, so a new
 // token there needs a decision here. Not the engines' colours, which are
-// Anthropic's and OpenAI's own, nor the --color-*, --radius-* and --font-*
-// that app.css works out from these.
+// Anthropic's, OpenAI's and Cursor's own, nor the --color-*, --radius-* and
+// --font-* that app.css works out from these.
 export const THEME_TOKENS = {
   "--brand-primary": "colour",
   "--brand-secondary": "colour",

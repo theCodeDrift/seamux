@@ -9,6 +9,7 @@ Entries about cmux that live in other domains:
 - [cmux's wrapper passes `claude` subcommands straight through](background-sessions.md#cmuxs-wrapper-passes-claude-subcommands-straight-through).
 - [`/rename` retitles the cmux tab, not the workspace](names.md#rename-retitles-the-tab-not-the-workspace-and-cmux-reports-a-new-title-late), and [cmux allows two workspaces with the same title](names.md#cmux-allows-two-workspaces-with-the-same-title).
 - [cmux can read Claude Code's slash menu](slash-commands.md#cmux-can-read-claude-codes-slash-menu-but-it-is-no-source-for-a-list).
+- Cursor under cmux: [cmux registers Cursor through hooks, not a wrapper](cursor.md#cmux-registers-cursor-through-hooks-not-a-wrapper), [cmux files a Cursor chat only once its first turn is over](cursor.md#cmux-files-a-cursor-chat-only-once-its-first-turn-is-over), [cmux records `~/.cursor` as every Cursor chat's directory](cursor.md#cmux-records-cursor-as-every-cursor-chats-directory), [A resumed chat keeps its old pid in cmux](cursor.md#a-resumed-chat-keeps-its-old-pid-in-cmux).
 - Codex under cmux: [cmux knows a Codex session only after its first prompt](codex.md#cmux-knows-a-codex-session-only-after-its-first-prompt), [`active_for_surface` stays `false`](codex.md#active_for_surface-stays-false-for-a-live-codex-session), [cmux's lifecycle is unreliable for Codex](codex.md#cmuxs-lifecycle-is-unreliable-for-codex).
 - How cmux's keys and text reach Claude Code: [The prompt box](prompt-box.md).
 
@@ -44,6 +45,14 @@ Into a raw-mode reader, `enter` arrived as `\r` and `shift+enter` as `ESC[27;2;1
 - **Measured:** cmux 0.64.23.
 - **In seamux:** `press` and `write` on `Session` in [harness.server.ts](../app/lib/harness.server.ts).
 - **See also:** [Shift+Enter is a line break in Claude Code's prompt box](prompt-box.md#shiftenter-is-a-line-break-in-claude-codes-prompt-box-and-a-typed-one-is-not), [A chat can ignore cmux's Enter](prompt-box.md#a-chat-can-ignore-cmuxs-enter-while-a-lone-typed-carriage-return-sends), [Type into a raw-mode reader](measuring.md#type-into-a-raw-mode-reader).
+
+## `terminal.paste` ends a paste with a carriage return of its own
+
+Into a raw-mode reader, `terminal.paste` of `hello paste` arrived as `hello paste`, then a separate `\r`; with bracketed paste on, as `ESC[200~hello paste ESC[201~`, then `\r`. The text asked for had no line break at its end. This is the Enter behind "a paste submits itself" in Codex and OpenCode, and what Cursor takes for an Enter, a line break or nothing. `surface.send_text` passes an escape sequence through, but in more than one write (`ESC`, then `[200~hello\rworld ESC`, then `[201~`), turning `\n` into `\r`, so it is no way to paste without the carriage return: a harness reading a lone `ESC` as the Esc key would be interrupted.
+
+- **Measured:** cmux 0.64.23.
+- **In seamux:** `paste` on `Session` in [harness.server.ts](../app/lib/harness.server.ts), and Cursor's `unsent` and `typesCommands` there.
+- **See also:** [Codex folds long typed input, and shows a paste in full](prompt-box.md#codex-folds-long-typed-input-and-shows-a-paste-in-full), [OpenCode keeps a pasted message whole and submits it](prompt-box.md#opencode-keeps-a-pasted-message-whole-and-submits-it-as-codex-does), [A paste shows in full and needs its own Enter, which can come too soon](cursor.md#a-paste-shows-in-full-and-needs-its-own-enter-which-can-come-too-soon), [Type into a raw-mode reader](measuring.md#type-into-a-raw-mode-reader).
 
 ## A workspace closes itself when its `initial_command` exits
 

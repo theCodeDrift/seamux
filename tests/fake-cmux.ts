@@ -66,6 +66,8 @@ export interface FakeSession {
   workspace_id: string;
   cwd?: string;
   transcript_path?: string | null;
+  agent_lifecycle?: string;
+  started_at?: string;
 }
 
 type InputListener = (

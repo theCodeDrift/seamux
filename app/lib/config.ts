@@ -106,22 +106,32 @@ If you have uncommitted work, say so and stop rather than discarding it.`,
 
 export const MAX_MACRO = 20_000;
 
-// The agents seamux can launch and drive, each through its cmux wrapper.
-// cmux integrates more (`cmux hooks setup` lists them), but only these have
+// The agents seamux can launch and drive, each through its cmux wrapper or
+// the hooks cmux installs into it. cmux integrates more (`cmux hooks setup` lists them), but only these have
 // been measured end to end; knowledge/ has what each one does.
-export const ENGINES = ["claude", "codex"] as const;
+export const ENGINES = ["claude", "codex", "cursor"] as const;
 export type Engine = (typeof ENGINES)[number];
 
 export const ENGINE_LABELS: Record<Engine, string> = {
   claude: "Claude Code",
   codex: "Codex",
+  cursor: "Cursor",
 };
 
 // Each service's own color, for what the board shows about it: Anthropic's
-// clay for Claude Code, OpenAI's teal for Codex.
+// clay for Claude Code, OpenAI's teal for Codex, and Cursor's warm near-black,
+// cream in dark mode.
 export const ENGINE_COLORS: Record<Engine, string> = {
   claude: "var(--engine-claude)",
   codex: "var(--engine-codex)",
+  cursor: "var(--engine-cursor)",
+};
+
+// Text on each service's color.
+export const ENGINE_FOREGROUNDS: Record<Engine, string> = {
+  claude: "var(--engine-foreground)",
+  codex: "var(--engine-foreground)",
+  cursor: "var(--engine-cursor-foreground)",
 };
 
 // What each agent can do that the board offers, readable in the browser as
@@ -141,6 +151,7 @@ export interface EngineFeatures {
 export const ENGINE_FEATURES: Record<Engine, EngineFeatures> = {
   claude: { slashCommands: true, fork: true, badge: false },
   codex: { slashCommands: false, fork: false, badge: true },
+  cursor: { slashCommands: false, fork: false, badge: true },
 };
 
 export function isEngine(name: string): name is Engine {

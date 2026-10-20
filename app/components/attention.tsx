@@ -6,7 +6,12 @@ import { ExternalLink, LoaderCircle, LogIn, Play, X } from "lucide-react";
 import { notify } from "~/components/waiting-alerts";
 import { Button, buttonVariants } from "~/components/ui/button";
 import { needsAction, type ServiceNotice } from "~/lib/board";
-import { ENGINE_COLORS, ENGINE_LABELS, type Engine } from "~/lib/config";
+import {
+  ENGINE_COLORS,
+  ENGINE_FOREGROUNDS,
+  ENGINE_LABELS,
+  type Engine,
+} from "~/lib/config";
 import { cn } from "~/lib/utils";
 import type { ServiceActionResult } from "~/routes/service-action";
 
@@ -87,7 +92,12 @@ function ServiceCard({ notice }: { notice: ServiceNotice }) {
       : summary(notice);
   return (
     <section
-      style={{ "--service": ENGINE_COLORS[service] } as CSSProperties}
+      style={
+        {
+          "--service": ENGINE_COLORS[service],
+          "--service-foreground": ENGINE_FOREGROUNDS[service],
+        } as CSSProperties
+      }
       className="flex flex-col gap-3 rounded-xl border-2 border-(--service) bg-[color-mix(in_oklch,var(--service)_14%,var(--card))] p-3 text-sm text-card-foreground shadow-sm dark:bg-[color-mix(in_oklch,var(--service)_18%,var(--card))] dark:shadow-black/20"
     >
       <header className="flex items-center justify-between gap-2">
@@ -131,7 +141,7 @@ function ServiceCard({ notice }: { notice: ServiceNotice }) {
               size="sm"
               disabled={action.pending}
               onClick={() => action.submit("login")}
-              className="bg-(--service) text-engine-foreground hover:bg-(--service)/85"
+              className="bg-(--service) text-(--service-foreground) hover:bg-(--service)/85"
             >
               {action.pending ? (
                 <LoaderCircle className="animate-spin" />
@@ -226,7 +236,7 @@ function SignIn({
       rel="noreferrer"
       className={cn(
         buttonVariants({ size: "sm" }),
-        "bg-(--service) text-engine-foreground hover:bg-(--service)/85",
+        "bg-(--service) text-(--service-foreground) hover:bg-(--service)/85",
       )}
     >
       <ExternalLink />
