@@ -49,7 +49,7 @@ The store at `data/seamux.db`, in `~/.seamux` or a clone, holds only what those 
 | WORKING | A turn is running, or one of its subagents is |
 | DONE | Closed by you. Hidden until you click **Show done**. A card stays for 30 minutes with a resume button, then drops off the board |
 
-The header shows how much of the Mac's memory is in use, as Activity Monitor counts it, with memory and swap in its tooltip. It turns amber when the kernel reports memory pressure, and red when it reports critical pressure, past which macOS closes apps to free memory, chats mid-turn among them. While it is red, **Dispatch** asks before starting another chat.
+The header shows how hard the Mac is pressed for memory, as the share macOS no longer counts as available once it has weighed compression and swap, with memory and swap in use in its tooltip. It turns amber when the kernel reports memory pressure, and red when it reports critical pressure, past which macOS closes apps to free memory, chats mid-turn among them. While it is red, **Dispatch** asks before starting another chat.
 
 Each column lists cards by when you last sent them a prompt, oldest first, so the chat you've left longest is at the top. A working chat keeps its place while its turn runs instead of jumping to the bottom each time it writes.
 

@@ -1,6 +1,6 @@
-// How much of the Mac's memory is in use and how hard macOS is pressed for
-// it, for the board's header and the dispatch bar, which asks before starting
-// another chat on a loaded Mac. See knowledge/memory-pressure.md.
+// How hard macOS is pressed for memory, and how much of it is in use, for
+// the board's header and the dispatch bar, which asks before starting another
+// chat on a loaded Mac. See knowledge/memory-pressure.md.
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -15,6 +15,15 @@ export function pressureFromLevel(level: number): MemoryPressure | null {
   if (level >= 4) return "critical";
   if (level >= 2) return "warn";
   return "normal";
+}
+
+// `kern.memorystatus_level` is the share of memory the kernel counts as
+// still available, the "free percentage" `memory_pressure` prints; the load
+// is the rest.
+export function loadFromLevel(available: number): number | null {
+  if (!Number.isFinite(available) || available < 0 || available > 100)
+    return null;
+  return 100 - available;
 }
 
 // Memory in use as Activity Monitor counts it: app memory (anonymous pages
@@ -57,19 +66,25 @@ export async function memoryUsage(): Promise<MemoryUsage | null> {
           "-n",
           "hw.memsize",
           "kern.memorystatus_vm_pressure_level",
+          "kern.memorystatus_level",
           "vm.swapusage",
         ],
         { timeout: 2_000 },
       ),
     ]);
-    const [memsize, level, swapusage = ""] = sysctl.stdout.trim().split("\n");
+    const [memsize, level, available, swapusage = ""] = sysctl.stdout
+      .trim()
+      .split("\n");
     const total = Number(memsize);
     const used = usedFromVmStat(vm.stdout);
     const pressure = pressureFromLevel(Number(level));
     const swap = swapFromSysctl(swapusage);
-    if (!pressure || used === null || !(total > 0) || !swap) return null;
+    const load = loadFromLevel(Number(available));
+    if (!pressure || load === null || used === null || !(total > 0) || !swap)
+      return null;
     return {
       pressure,
+      load,
       used,
       total,
       swapUsed: swap.used,

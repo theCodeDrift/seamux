@@ -268,9 +268,12 @@ export interface Board {
 
 export type MemoryPressure = "normal" | "warn" | "critical";
 
-// In bytes.
 export interface MemoryUsage {
   pressure: MemoryPressure;
+  // How much of memory the kernel no longer counts as available, 0 to 100:
+  // 100 less `kern.memorystatus_level`.
+  load: number;
+  // The rest in bytes.
   used: number;
   total: number;
   swapUsed: number;

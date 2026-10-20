@@ -23,14 +23,15 @@ const gb = (bytes: number) => `${(bytes / 2 ** 30).toFixed(1)} GB`;
 
 export function memoryTitle(memory: MemoryUsage): string {
   return [
+    `macOS counts ${100 - memory.load}% of memory as still available.`,
     `Using ${gb(memory.used)} of ${gb(memory.total)} memory, with ${gb(memory.swapUsed)} of ${gb(memory.swapTotal)} swap in use.`,
     PRESSURE[memory.pressure],
   ].join(" ");
 }
 
-// Beside LAN and Remote in the header: the share of memory in use, coloured
-// by the kernel's pressure level, which is what decides when macOS closes
-// apps.
+// Beside LAN and Remote in the header: how much of memory the kernel no
+// longer counts as available, coloured by its pressure level, which is what
+// decides when macOS closes apps.
 export function MemoryBadge({
   memory,
   className,
@@ -53,7 +54,7 @@ export function MemoryBadge({
       title={memoryTitle(memory)}
     >
       <MemoryStick className="size-3.5" />
-      {Math.min(100, Math.round((memory.used / memory.total) * 100))}%
+      {memory.load}%
     </span>
   );
 }

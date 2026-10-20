@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { memoryTitle } from "~/components/memory-pressure";
 import {
+  loadFromLevel,
   pressureFromLevel,
   swapFromSysctl,
   usedFromVmStat,
@@ -20,6 +21,19 @@ describe("pressureFromLevel", () => {
     expect(pressureFromLevel(0)).toBeNull();
     expect(pressureFromLevel(Number(""))).toBeNull();
     expect(pressureFromLevel(Number("abc"))).toBeNull();
+  });
+});
+
+describe("loadFromLevel", () => {
+  it("is what the kernel no longer counts as available", () => {
+    expect(loadFromLevel(40)).toBe(60);
+    expect(loadFromLevel(100)).toBe(0);
+  });
+
+  it("gives nothing for what isn't a percentage", () => {
+    expect(loadFromLevel(Number(undefined))).toBeNull();
+    expect(loadFromLevel(Number("abc"))).toBeNull();
+    expect(loadFromLevel(101)).toBeNull();
   });
 });
 
@@ -65,13 +79,14 @@ describe("memoryTitle", () => {
     expect(
       memoryTitle({
         pressure: "warn",
+        load: 60,
         used: 13 * 2 ** 30,
         total: 16 * 2 ** 30,
         swapUsed: 7.9 * 2 ** 30,
         swapTotal: 9 * 2 ** 30,
       }),
     ).toMatch(
-      /^Using 13\.0 GB of 16\.0 GB memory, with 7\.9 GB of 9\.0 GB swap in use\. macOS reports memory pressure/,
+      /^macOS counts 40% of memory as still available\. Using 13\.0 GB of 16\.0 GB memory, with 7\.9 GB of 9\.0 GB swap in use\. macOS reports memory pressure/,
     );
   });
 });
