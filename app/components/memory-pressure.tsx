@@ -9,46 +9,51 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
-import type { MemoryPressure } from "~/lib/board";
+import type { MemoryPressure, MemoryUsage } from "~/lib/board";
 import { cn } from "~/lib/utils";
 
-export const MEMORY_LABELS: Record<
-  Exclude<MemoryPressure, "normal">,
-  { label: string; title: string }
-> = {
-  warn: {
-    label: "Memory pressure",
-    title:
-      "macOS reports memory pressure: every new chat adds to it, and past this it starts closing apps",
-  },
-  critical: {
-    label: "System loaded",
-    title:
-      "macOS reports critical memory pressure and may close apps, chats included. Close a chat before starting another",
-  },
+const PRESSURE: Record<MemoryPressure, string> = {
+  normal: "macOS reports no memory pressure.",
+  warn: "macOS reports memory pressure: it is compressing and swapping to keep up, and every new chat adds to it.",
+  critical:
+    "macOS reports critical memory pressure and may close apps, chats included. Close a chat before starting another.",
 };
 
-// Beside LAN and Remote in the header, from a warning up.
+const gb = (bytes: number) => `${(bytes / 2 ** 30).toFixed(1)} GB`;
+
+export function memoryTitle(memory: MemoryUsage): string {
+  return [
+    `Using ${gb(memory.used)} of ${gb(memory.total)} memory, with ${gb(memory.swapUsed)} of ${gb(memory.swapTotal)} swap in use.`,
+    PRESSURE[memory.pressure],
+  ].join(" ");
+}
+
+// Beside LAN and Remote in the header: the share of memory in use, coloured
+// by the kernel's pressure level, which is what decides when macOS closes
+// apps.
 export function MemoryBadge({
   memory,
   className,
 }: {
-  memory: MemoryPressure | null;
+  memory: MemoryUsage | null;
   className?: string;
 }) {
-  if (!memory || memory === "normal") return null;
-  const { label, title } = MEMORY_LABELS[memory];
+  if (!memory) return null;
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center gap-1 text-xs",
-        memory === "critical" ? "text-destructive" : "text-warning-text",
+        "flex shrink-0 items-center gap-1 text-xs tabular-nums",
+        memory.pressure === "critical"
+          ? "text-destructive"
+          : memory.pressure === "warn"
+            ? "text-warning-text"
+            : "text-muted-foreground",
         className,
       )}
-      title={title}
+      title={memoryTitle(memory)}
     >
       <MemoryStick className="size-3.5" />
-      {label}
+      {Math.min(100, Math.round((memory.used / memory.total) * 100))}%
     </span>
   );
 }
@@ -70,8 +75,8 @@ export function LoadedConfirm({
           <DialogTitle>Start another chat on a loaded Mac?</DialogTitle>
           <DialogDescription>
             macOS reports critical memory pressure. Every chat is its own
-            process, and past this point macOS closes apps to free memory,
-            chats mid-turn among them. Closing a chat first frees some.
+            process, and past this point macOS closes apps to free memory, chats
+            mid-turn among them. Closing a chat first frees some.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

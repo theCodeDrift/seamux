@@ -2318,7 +2318,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 worktreeByDefault={config.worktreeByDefault}
                 defaultEngine={config.defaultEngine}
                 engines={engines}
-                memory={board.memory}
+                memory={board.memory?.pressure ?? null}
                 onDispatched={() => setDispatchOpen(false)}
               />
             </div>
