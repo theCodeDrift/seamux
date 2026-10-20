@@ -105,7 +105,7 @@ async function resolveLine(
   return bareStats ? { path: bare, stats: bareStats } : null;
 }
 
-const WORKTREE = /^(.*?)\/(?:\.claude\/)?worktrees\/[^/]+(\/.*)$/;
+const WORKTREE = /^(.*?)\/(?:\.claude\/|\.agents\/\.)?worktrees\/[^/]+(\/.*)$/;
 
 // A reply resolves its paths against the session's directory, and a
 // session in a worktree removes that worktree once its work has landed. A

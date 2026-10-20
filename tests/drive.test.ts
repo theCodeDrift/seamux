@@ -3,7 +3,13 @@
 // board depends on, and each was measured against cmux and Claude Code by
 // hand first (knowledge/); these keep it from drifting.
 
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -31,6 +37,7 @@ import {
   sendMessage,
   takeDraft,
   UnsentError,
+  worktreeHome,
   worktreeId,
 } from "~/lib/drive.server";
 import {
@@ -1214,6 +1221,18 @@ describe("resume", () => {
     );
     expect(command).toContain("--resume");
     expect(command).toContain("cursor-old");
+  });
+});
+
+describe("worktreeHome", () => {
+  it("prefers .agents/.worktrees/, then .claude/worktrees/, else worktrees/", () => {
+    const repo = mkdtempSync(join(tmpdir(), "seamux-home-"));
+    expect(worktreeHome(repo)).toBe("worktrees/");
+    mkdirSync(join(repo, ".claude/worktrees"), { recursive: true });
+    expect(worktreeHome(repo)).toBe(".claude/worktrees/");
+    mkdirSync(join(repo, ".agents/.worktrees"), { recursive: true });
+    expect(worktreeHome(repo)).toBe(".agents/.worktrees/");
+    rmSync(repo, { recursive: true, force: true });
   });
 });
 

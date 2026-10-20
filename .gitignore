@@ -149,10 +149,13 @@ vite.config.ts.timestamp-*
 # seamux store
 /data/
 
-# Local worktrees
+# Git worktrees. New ones go in .agents/.worktrees/, the location every agent
+# harness shares; its .gitkeep is tracked so the directory exists in every
+# clone. worktrees/ and .claude/worktrees/ are earlier locations, kept ignored
+# so worktrees still living there never show up as untracked.
+/.agents/.worktrees/*
+!/.agents/.worktrees/.gitkeep
 /worktrees/
-
-# Claude Code worktrees (claude -w)
 /.claude/worktrees/
 
 # How this checkout runs the board, written by npm run seamux

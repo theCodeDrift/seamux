@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.agents/skills/worktrees-pnpm/scripts/worktree-create.sh\"",
+            "statusMessage": "Creating worktree"
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.agents/skills/worktrees-pnpm/scripts/worktree-remove.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}

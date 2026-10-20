@@ -202,26 +202,30 @@ describe("closeSession", () => {
     expect(c.exited()).toBe(false);
   });
 
-  it("holds a chat whose worktree is still there", async () => {
-    const worktree = join(
-      mkdtempSync(join(tmpdir(), "seamux-close-")),
-      ".claude/worktrees/feature",
-    );
-    mkdirSync(join(worktree, "src"), { recursive: true });
-    const c = chat(join(worktree, "src"));
-    await closeSession(c.card, [c.card], c.lookup);
-    turnStarts(c.card);
-    await poll();
-    c.card.column = "idle";
-    await poll();
-    await vi.waitFor(() =>
-      expect(c.state()).toMatchObject({
-        state: "held",
-        note: expect.stringMatching(/worktree is still there/),
-      }),
-    );
-    expect(c.exited()).toBe(false);
-  });
+  it.each([".agents/.worktrees", ".claude/worktrees", "worktrees"])(
+    "holds a chat whose worktree in %s is still there",
+    async (home) => {
+      const worktree = join(
+        mkdtempSync(join(tmpdir(), "seamux-close-")),
+        home,
+        "feature",
+      );
+      mkdirSync(join(worktree, "src"), { recursive: true });
+      const c = chat(join(worktree, "src"));
+      await closeSession(c.card, [c.card], c.lookup);
+      turnStarts(c.card);
+      await poll();
+      c.card.column = "idle";
+      await poll();
+      await vi.waitFor(() =>
+        expect(c.state()).toMatchObject({
+          state: "held",
+          note: expect.stringMatching(/worktree is still there/),
+        }),
+      );
+      expect(c.exited()).toBe(false);
+    },
+  );
 
   it("exits a held chat on the next close, without the macro", async () => {
     const repo = gitRepo();

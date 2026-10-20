@@ -658,7 +658,9 @@ function describeSiblings(card: Card, cards: Card[]): string {
 
 // The worktree a directory sits in, if any.
 function worktreeOf(cwd: string): string | null {
-  return cwd.match(/^.*\/(?:\.claude\/)?worktrees\/[^/]+/)?.[0] ?? null;
+  return (
+    cwd.match(/^.*\/(?:\.claude\/|\.agents\/\.)?worktrees\/[^/]+/)?.[0] ?? null
+  );
 }
 
 async function uncommitted(cwd: string): Promise<boolean> {
@@ -1096,7 +1098,7 @@ interface Worktree {
   branch: string;
   // The repo's main checkout, which holds every worktree.
   repo: string;
-  // Where in it the worktrees go: .claude/worktrees/ or worktrees/.
+  // Where in it the worktrees go: one of WORKTREE_HOMES.
   home: string;
 }
 
@@ -1148,14 +1150,30 @@ function openingMacros(name: string, cwd: string, wt: Worktree | null) {
   };
 }
 
+// Where a repo keeps its worktrees, relative to its main checkout: the first
+// of these it has, else the last. .agents/.worktrees/ is the place every
+// agent harness shares, .claude/worktrees/ is where Claude Code puts them,
+// and worktrees/ asks nothing of the repo but an ignore entry.
+const WORKTREE_HOMES = [
+  ".agents/.worktrees/",
+  ".claude/worktrees/",
+  "worktrees/",
+];
+
+export function worktreeHome(repo: string): string {
+  return (
+    WORKTREE_HOMES.find((home) => existsSync(join(repo, home))) ??
+    WORKTREE_HOMES[WORKTREE_HOMES.length - 1]
+  );
+}
+
 // A new worktree for dispatched work, branched from what the chosen checkout
 // has checked out now. seamux makes it rather than `claude --worktree`, which
 // branches from the remote's default branch (stale when main is unpushed)
 // and stops on exit to ask whether to keep the worktree.
 //
 // It goes in the repo's main checkout, even when the chosen checkout is
-// itself a worktree, so worktrees never nest: under .claude/worktrees if
-// that exists, else worktrees/.
+// itself a worktree, so worktrees never nest: under worktreeHome(repo).
 //
 // The same opening words give the same name, so a short random id goes on
 // the end: a name is never handed out twice, even once its worktree and
@@ -1177,9 +1195,7 @@ async function createWorktree(cwd: string, name: string): Promise<NewWorktree> {
   }
   // The main checkout is the first entry git lists, from any worktree.
   const repo = list.split("\n")[0].replace(/^worktree /, "");
-  const relHome = existsSync(join(repo, ".claude/worktrees"))
-    ? ".claude/worktrees/"
-    : "worktrees/";
+  const relHome = worktreeHome(repo);
   const home = join(repo, relHome);
   const taken = async (candidate: string) =>
     existsSync(join(home, candidate)) ||

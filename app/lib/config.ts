@@ -59,7 +59,7 @@ export const MACROS: Record<MacroName, MacroInfo> = {
       {
         name: "worktrees",
         meaning:
-          "where seamux puts the repo's worktrees, relative to the main checkout: .claude/worktrees/ or worktrees/",
+          "where seamux puts the repo's worktrees, relative to the main checkout: .agents/.worktrees/ or .claude/worktrees/ when the repo has one, otherwise worktrees/",
       },
     ],
     required: null,

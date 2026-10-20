@@ -25,7 +25,7 @@ Follow [Getting started](docs/getting-started.md): macOS, cmux, Claude Code and 
 
 The board you're running serves from your checkout, and hot reload applies every saved file within seconds, so a half-finished change breaks the board you're using. Work in a git worktree on its own branch instead, and bring the change into the checkout the board runs from once it's done:
 
-1. Make a worktree, under `worktrees/` or `.claude/worktrees/` (both gitignored), branched from the latest `main`, and run `npm install` in it. Don't symlink `node_modules` into it.
+1. Make a worktree under `.agents/.worktrees/` (gitignored), branched from the latest `main`, and run `npm install` in it. Don't symlink `node_modules` into it.
 2. Commit, then run `npm run land` from the worktree. It rebases your branch onto `main`, typechecks it, fast-forwards `main`, restarts the board if dependencies or a `.server.ts` module changed, and pushes `main` to `origin`. Run `npm run land -- --no-push` to keep the landing local, as in a clone you can't push from.
 
 For a pull request, push your branch and open the PR against `main` instead of landing it. A maintainer can ask Claude about it with a comment: `@claude /review` reviews it (incrementally after the first time; `@claude /review all` from scratch), and `@claude /focus` (or `@claude /focus 5`) points a human reviewer at the few sections most worth their attention. Both only read and comment, and never run for anyone but a maintainer.

@@ -1,8 +1,12 @@
 // Each card's path carries a colour for the project it belongs to, so cards
 // from one repo can be spotted at a glance. A worktree
-// (`.claude/worktrees/<name>` or `worktrees/<name>`) belongs to its repo.
+// (`.agents/.worktrees/<name>`, `.claude/worktrees/<name>` or
+// `worktrees/<name>`) belongs to its repo.
 export function projectOf(cwd: string): string {
-  return cwd.replace(/\/(?:\.claude\/)?worktrees\/[^/]+(?:\/.*)?$/, "");
+  return cwd.replace(
+    /\/(?:\.claude\/|\.agents\/\.)?worktrees\/[^/]+(?:\/.*)?$/,
+    "",
+  );
 }
 
 // The picker's colours are slots, 1 to PROJECT_COLOR_COUNT, each painted by
