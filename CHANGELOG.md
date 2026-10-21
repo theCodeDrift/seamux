@@ -1,5 +1,24 @@
 # seamux
 
+## 0.5.0
+
+### Minor Changes
+
+- aa356d6: The dispatch bar's "new worktree" now puts the worktree in `.agents/.worktrees/` when the repo has that directory, the place every agent harness shares, ahead of `.claude/worktrees/` and then `worktrees/`. Worktrees there are coloured with their repo and their files open from the board like any other worktree's. To adopt it in a repo, create `.agents/.worktrees/` with a tracked `.gitkeep`, ignore everything else in it (`.agents/.worktrees/*` and `!.agents/.worktrees/.gitkeep`), and keep the old locations ignored while worktrees still live there. If you customised the How to worktree macro, `{{worktrees}}` now names this directory too.
+
+### Patch Changes
+
+- 1426941: Attention now runs across the full width of the board, under the dispatch bar and above the columns, instead of taking the leftmost column: a service that needs you pushes the columns down rather than squeezing them. On a phone it stays the first screen of the carousel.
+- 28f7cd3: A chat just cleared with `/clear` no longer flashes up as idle and "Not in a cmux surface" for one refresh. Claude Code moves to the new session id a moment before cmux does, and the board now finds the chat by its process while cmux catches up.
+- 6db3ca4: A Codex chat started in a folder Codex hasn't seen no longer sits on its trust dialog while the board shows it working: seamux answers the dialog, as it does for Claude Code.
+- 2e10642: Drive Cursor's `agent` CLI from the board, as well as Claude Code and Codex: dispatch Cursor chats, read and reply to them, approve or deny their commands (or pick Run Everything, so the rest of the chat's run unasked), stop, rename, close and resume them. Cursor cards carry Cursor's near-black corner, cream in dark mode. cmux has no wrapper for Cursor, so run `cmux hooks cursor install` once; until then Cursor stays greyed out in the dispatch bar.
+- 5a9c428: A chat's full view now offers Fork and Clone side by side. Fork starts the tangent in a new worktree branched from what the chat has checked out, and tells it so in its first prompt, so its card shows the new worktree. Clone starts it in the chat's own folder, as Fork did before. A chat in a worktree shows Fork, with Clone as the copy icon beside it; any other chat shows Clone, with Fork as the fork icon beside it.
+- 213a28a: Slash-command suggestions in the board's reply boxes work again with Claude Code 2.1.301, which stopped printing its command list unasked; seamux now asks for it. Typing `/` also no longer puts an extra idle card on the board saying "Not in a cmux surface": that was the short-lived Claude Code process seamux starts to list the commands, which `claude agents` reports as a chat.
+- 556905f: The board's header now shows how hard the Mac is pressed for memory, as the share macOS no longer counts as available, beside LAN and Remote, with memory and swap in use in its tooltip. It turns amber when macOS reports memory pressure and red when it reports critical pressure; while it is red, Dispatch asks before starting another chat, since macOS starts closing apps, chats mid-turn among them, past that point.
+- 194e72b: Editing a queued message in a chat's full view now survives a reload, such as the board restarting after a landing: the edit stays open with what you'd typed.
+- a2e56c1: A chat that had ended no longer comes back on the board when macOS gives its process id to another program. A Cursor chat closed at an approval could reappear for a moment, asking for that approval again, whenever another process briefly took its old id, as when closing another chat. The board now checks that the process at a chat's id started when cmux recorded it starting, for every harness.
+- d845874: The chat shows the whole conversation again. It read only the last 2 MB of a transcript, which tool output can fill with a handful of messages, so long chats seemed to have lost their history. It now shows the last 100 messages, with "Show earlier messages" to go further back, and each run of tool calls between replies as one line, such as "💻 called Bash ×3, Read".
+
 ## 0.4.0
 
 ### Minor Changes
