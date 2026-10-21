@@ -386,36 +386,41 @@ export function ChatModal({
                   <Paperclip />
                   Attach
                 </Button>
+                {/* Fork and its worktree switch, joined as one control: the
+                switch below Fork from md, beside it under. */}
                 {onFork && (
-                  <label
-                    className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-muted-foreground"
-                    title="Fork into a new worktree, branched from what this chat has checked out"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={forkWorktree}
-                      onChange={(e) => setForkWorktree(e.target.checked)}
-                      className="size-4 cursor-pointer accent-brand-primary"
-                    />
-                    Worktree
-                  </label>
-                )}
-                {onFork && (
-                  <Button
-                    variant="outline"
-                    disabled={
-                      forking || !draft.trim() || attachments.length > 0
-                    }
-                    onClick={() => onFork(forkWorktree)}
-                    title={
-                      attachments.length > 0
-                        ? "A fork can't take attachments yet"
-                        : "Start a new session with this chat's context and this message"
-                    }
-                  >
-                    <GitFork />
-                    {forking ? "Forking…" : "Fork"}
-                  </Button>
+                  <div className="flex rounded-lg border border-border md:flex-col dark:border-input">
+                    <Button
+                      variant="ghost"
+                      className="rounded-r-none border-0 md:rounded-r-lg md:rounded-b-none"
+                      disabled={
+                        forking || !draft.trim() || attachments.length > 0
+                      }
+                      onClick={() => onFork(forkWorktree)}
+                      title={
+                        attachments.length > 0
+                          ? "A fork can't take attachments yet"
+                          : forkWorktree
+                            ? "Start a new session with this chat's context and this message, in a new worktree"
+                            : "Start a new session with this chat's context and this message"
+                      }
+                    >
+                      <GitFork />
+                      {forking ? "Forking…" : "Fork"}
+                    </Button>
+                    <label
+                      className="flex h-8 shrink-0 cursor-pointer items-center justify-center gap-1.5 border-l border-border px-2.5 text-xs text-muted-foreground hover:text-foreground md:border-t md:border-l-0 dark:border-input"
+                      title="Fork into a new worktree, branched from what this chat has checked out"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={forkWorktree}
+                        onChange={(e) => setForkWorktree(e.target.checked)}
+                        className="size-3.5 cursor-pointer accent-brand-primary"
+                      />
+                      Worktree
+                    </label>
+                  </div>
                 )}
                 <Button
                   disabled={!canSend}
