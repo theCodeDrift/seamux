@@ -32,3 +32,10 @@ It prints a JSON array with one row per chat on this Mac, in any terminal or non
 - **Measured:** not recorded.
 - **In seamux:** `dispatch` and `fork` in [drive.server.ts](../app/lib/drive.server.ts).
 - **See also:** [A prompt given at launch waits for the trust dialog](codex.md#a-prompt-given-at-launch-waits-for-the-trust-dialog), Codex's version.
+
+## A fork finds its parent from any directory
+
+`--resume <id> --fork-session` finds the parent's transcript by its id wherever it is started: from another worktree of the same repo, from another folder of the parent's repo than the one it ran in, and from a different repo altogether. The fork carries the parent's whole conversation, takes the directory it was started in as its own, and its transcript is filed under that directory's project folder in `~/.claude/projects`, not the parent's. So seamux forks into a new worktree by starting the fork there. A chat that runs `git worktree add` itself and then `cd`s into it in each command stays, to `claude agents --json`, in the directory it started in, since Claude Code puts the shell back there after every command.
+
+- **Measured:** Claude Code 2.1.306, with `claude -p` forks of a throwaway repo's chat into its worktree and into another repo.
+- **In seamux:** `fork` in [drive.server.ts](../app/lib/drive.server.ts).

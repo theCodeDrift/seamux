@@ -57,6 +57,9 @@ import { cn } from "~/lib/utils";
 const POLL_MS = 3000;
 // Within this many pixels of the end counts as reading the latest message.
 const AT_END_PX = 40;
+// Whether a fork gets its own worktree, kept for the tab like the dispatch
+// bar's.
+const FORK_WORKTREE_KEY = "seamux:fork:worktree";
 
 // Full-screen view of one card: the conversation, and room to write the
 // next message. The draft is shared with the card's inline input.
@@ -93,14 +96,19 @@ export function ChatModal({
   queueing: boolean;
   pending: boolean;
   error: string | null;
-  // null when the chat's agent can't fork: only Claude Code can.
-  onFork: (() => void) | null;
+  // null when the chat's agent can't fork: only Claude Code can. With
+  // `worktree`, the fork runs in a new worktree of its own.
+  onFork: ((worktree: boolean) => void) | null;
   forking: boolean;
   // The chat's name, renamable here, where a double-click can't reach on a
   // phone.
   title?: ReactNode;
 }) {
   const coarse = useCoarsePointer();
+  const [forkWorktree, setForkWorktree] = useSessionStorage(
+    FORK_WORKTREE_KEY,
+    false,
+  );
   const asking = card.waiting?.ask != null;
   const submitKey = useSubmitKey();
   const fetcher = useFetcher<{ messages: ChatMessage[]; total: number }>();
@@ -379,12 +387,26 @@ export function ChatModal({
                   Attach
                 </Button>
                 {onFork && (
+                  <label
+                    className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-muted-foreground"
+                    title="Fork into a new worktree, branched from what this chat has checked out"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={forkWorktree}
+                      onChange={(e) => setForkWorktree(e.target.checked)}
+                      className="size-4 cursor-pointer accent-brand-primary"
+                    />
+                    Worktree
+                  </label>
+                )}
+                {onFork && (
                   <Button
                     variant="outline"
                     disabled={
                       forking || !draft.trim() || attachments.length > 0
                     }
-                    onClick={onFork}
+                    onClick={() => onFork(forkWorktree)}
                     title={
                       attachments.length > 0
                         ? "A fork can't take attachments yet"

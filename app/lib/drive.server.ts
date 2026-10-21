@@ -1377,11 +1377,19 @@ export async function dispatch(input: DispatchInput): Promise<string> {
 
 // Split a tangent out of a chat: a new session that starts with the
 // parent's full context, leaving the parent untouched.
+//
+// With `worktree`, the tangent runs in a new worktree branched from what the
+// parent has checked out, so the card shows where it works. The parent's
+// context still names the parent's directory throughout, so the first
+// prompt goes in the new-session macro, with Session information and How to
+// worktree naming the new one. Claude Code finds the parent's transcript by
+// its id from any directory (knowledge/claude-code.md).
 export async function fork(
   parentId: string,
   cwd: string,
   prompt: string,
   engine: Engine,
+  worktree = false,
 ): Promise<string> {
   const text = prompt.trim();
   if (!text) throw new Error("Say what the tangent is");
@@ -1391,22 +1399,27 @@ export async function fork(
   const sessionId = randomUUID();
   const inUse = await namesInUse();
   const base = nameFrom(text);
+  const wt = worktree ? await createWorktree(cwd, base) : null;
   const name = base + (await freeSuffix((s) => inUse.has(base + s)));
+  const where = wt?.path ?? cwd;
   recordDispatch({
     session_id: sessionId,
-    cwd,
+    cwd: where,
     prompt: text,
     name,
-    worktree: null,
+    worktree: wt ? base + wt.suffix : null,
     forked_from: parentId,
     dispatch_id: null,
     worker: null,
   });
   await launch(
     engine,
-    cwd,
+    where,
     name,
-    [...forkArgs(parentId, sessionId, name), asPrompt(text)],
+    [
+      ...forkArgs(parentId, sessionId, name),
+      asPrompt(wt ? firstPrompt(text, name, where, wt) : text),
+    ],
     false,
   );
   return sessionId;

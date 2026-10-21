@@ -264,6 +264,7 @@ async function perform(
       info.cwd,
       String(form.get("text") ?? ""),
       info.engine,
+      form.get("worktree") === "on",
     );
   } else if (intent === "pin" || intent === "unpin") {
     setPinned(sessionId, intent === "pin");

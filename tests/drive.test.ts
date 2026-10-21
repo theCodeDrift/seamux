@@ -1265,6 +1265,37 @@ describe("fork", () => {
     expect(command).toContain(sessionId);
   });
 
+  it("starts a fork in a new worktree, and tells it so", async () => {
+    const repo = realpathSync(mkdtempSync(join(tmpdir(), "seamux-fork-")));
+    try {
+      execFileSync("git", ["init", "-q", repo]);
+      execFileSync("git", [
+        "-C",
+        repo,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "init",
+      ]);
+      await fork("parent-id", repo, "Try it another way", "claude", true);
+      const { params } = cmux.calls("workspace.create")[0];
+      expect(String(params.cwd)).toMatch(
+        new RegExp(`^${repo}/worktrees/try-it-another-way-[a-z0-9]{4}$`),
+      );
+      const command = String(params.initial_command);
+      expect(command).toContain("--fork-session");
+      expect(command).toContain("How to worktree");
+      expect(command).toContain(`in ${params.cwd}.`);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
   it("refuses a harness that can't fork, before reaching cmux", async () => {
     await expect(
       fork("parent-id", "/tmp", "Try it another way", "codex"),

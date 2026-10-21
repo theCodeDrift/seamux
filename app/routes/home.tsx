@@ -483,7 +483,7 @@ function ChatInput({
     restore();
   }, [started, restore]);
   const forker = useSessionAction(card.sessionId, forked, forkFailed);
-  const fork = () => {
+  const fork = (worktree: boolean) => {
     if (!draft.trim()) return;
     const text = takeDraft();
     forking.current = spawn({
@@ -493,7 +493,7 @@ function ChatInput({
       engine: card.engine,
       forked: true,
     });
-    forker.submit("fork", { text });
+    forker.submit("fork", worktree ? { text, worktree: "on" } : { text });
   };
   const canSend = card.drivable && !pending && draft.trim().length > 0;
   const queueing = card.column === "working" || card.boardQueue.length > 0;
