@@ -20,16 +20,19 @@
         "mode": "reference"
       }
     },
-    "cliVersion": "0.13.3-20261021190126x85025cb",
+    "cliVersion": "0.13.3",
     "onboarded": true,
     "launchers": {
-      "@taskless/cli-nightly": "0.13.3-20261021190126x85025cb"
+      "@taskless/cli-nightly": "0.13.3-20261021190126x85025cb",
+      "@taskless/cli": "0.13.3"
     },
     "permissions": {
       ".claude/settings.json": {
         "rules": [
           "Bash(npx @taskless/cli-nightly@0.13.3-20261021190126x85025cb *)",
-          "Bash(./.taskless/bin/cli-nightly.mjs *)"
+          "Bash(./.taskless/bin/cli-nightly.mjs *)",
+          "Bash(npx @taskless/cli@0.13.3 *)",
+          "Bash(./.taskless/bin/cli.mjs *)"
         ],
         "created": false
       }
