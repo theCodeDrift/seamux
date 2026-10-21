@@ -5,17 +5,11 @@
         "skills": [
           "taskless"
         ],
-        "commands": [
-          "tskl.md"
-        ],
         "mode": "canonical"
       },
       ".claude": {
         "skills": [
           "taskless"
-        ],
-        "commands": [
-          "tskl.md"
         ],
         "mode": "reference"
       },
@@ -26,15 +20,27 @@
         "mode": "reference"
       }
     },
-    "cliVersion": "0.12.0-20261002181147x023048f",
-    "onboarded": true
+    "cliVersion": "0.13.3-20261021190126x85025cb",
+    "onboarded": true,
+    "launchers": {
+      "@taskless/cli-nightly": "0.13.3-20261021190126x85025cb"
+    },
+    "permissions": {
+      ".claude/settings.json": {
+        "rules": [
+          "Bash(npx @taskless/cli-nightly@0.13.3-20261021190126x85025cb *)",
+          "Bash(./.taskless/bin/cli-nightly.mjs *)"
+        ],
+        "created": false
+      }
+    }
   },
-  "version": 10,
+  "version": 11,
   "rules": {
-    "reconciledTo": "0.12.0-20261002181147x023048f",
+    "reconciledTo": "0.13.3-20261021190126x85025cb",
     "engines": {
-      "sg": "0.45.3",
-      "vale": "3.23.0"
+      "sg": "0.51.0",
+      "vale": "3.24.0"
     }
   }
 }

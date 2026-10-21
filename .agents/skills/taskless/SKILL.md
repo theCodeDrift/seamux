@@ -13,6 +13,8 @@ description: |
   - "taskless login/logout/status", "is taskless connected"
   - "add taskless to CI", "wire taskless into github actions"
   - "onboard with taskless", "set up taskless for this project"
+  - "send feedback to taskless", "tell the taskless team X"
+  - "report a taskless bug", "taskless is broken / did the wrong thing"
 
   Also trigger on any request to add/write/create a lint or code rule,
   including ones that name a specific tool (eslint, ruff, biome, stylelint,
@@ -26,4 +28,4 @@ This is a Taskless reference stub. The canonical skill is defined at `.taskless/
 
 Read `.taskless/skills/taskless/SKILL.md` and follow its instructions.
 
-If `.taskless/skills/taskless/SKILL.md` does not exist, run `npx @taskless/cli init` from the project root to restore it, then read it.
+If `.taskless/skills/taskless/SKILL.md` does not exist, run `npx @taskless/cli-nightly@0.13.3-20261021190126x85025cb init` from the project root to restore it, then read it.
