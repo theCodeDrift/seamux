@@ -143,7 +143,7 @@ Asked to put a question with a structured tool, the agent looked for one and fou
 
 - **Measured:** Cursor Agent 2026.10.19, cmux 0.64.23.
 - **In seamux:** `runningCursorSessions` in [cursor.server.ts](../app/lib/cursor.server.ts), Cursor's `running` and `keepsOldPid` in [harness.server.ts](../app/lib/harness.server.ts), `listLive` in [drive.server.ts](../app/lib/drive.server.ts).
-- **See also:** [`cmux sessions list` can lose a live Claude session's pid](cmux.md#cmux-sessions-list-can-lose-a-live-claude-sessions-pid).
+- **See also:** [`cmux sessions list` can lose a live Claude session's pid](cmux.md#cmux-sessions-list-can-lose-a-live-claude-sessions-pid); [A Cursor chat's reused pid has no launch command to tell it by](cmux.md#a-cursor-chats-reused-pid-has-no-launch-command-to-tell-it-by), which also holds for this old pid once another process takes it.
 
 ## `agent status` says whether it is signed in
 

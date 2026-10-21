@@ -5,7 +5,7 @@
 import { execFile } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { realpath, stat } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { promisify } from "node:util";
 
@@ -68,6 +68,9 @@ interface CmuxSession {
   // to another process.
   launch_arguments?: string[];
   stored_pid_arguments?: string[];
+  // The hook file the record is in, which also says when the session's
+  // process started.
+  store_path?: string;
   surface_id: string;
   workspace_id: string;
   cwd?: string;
@@ -130,7 +133,8 @@ export interface Wanted {
 // cmux sometimes loses a session's pid and can't tell, so the harness's
 // own list of running sessions decides those, where it has one. Nor does
 // cmux notice a pid handed on to another process, so a stored pid running
-// something other than what the session was launched with is a dead one.
+// something other than what the session was launched with, or a process
+// that started at another time than cmux recorded for it, is a dead one.
 // A chat whose id just changed in its own process, as after /clear, is
 // under its old id in cmux for a moment, then under none, so each of
 // `want` cmux doesn't list is found by its process: the live session with
@@ -150,9 +154,13 @@ export async function listLive(
     if (!asked.has(h)) asked.set(h, h.running!());
     return asked.get(h)!;
   };
+  const handedOn = await pidsHandedOn(sessions);
+  // Its process exited, and its pid may since have gone to another.
+  const pidGone = (s: CmuxSession) =>
+    s.stored_pid_exists === false || pidReused(s) || handedOn.has(s.session_id);
   // cmux lost the pid, or keeps a resumed session's old one.
   const pidUnknown = (s: CmuxSession, h: Harness) =>
-    s.stored_pid_exists == null || (!s.stored_pid_exists && !!h.keepsOldPid);
+    s.stored_pid_exists == null || (pidGone(s) && !!h.keepsOldPid);
   const pidless = new Set(
     sessions.flatMap((s) => {
       const h = harnessOf(s.agent);
@@ -180,7 +188,7 @@ export async function listLive(
     if (pidUnknown(s, harness)) {
       if (!harness.running || !running.has(s.session_id)) continue;
       pid = running.get(s.session_id)!;
-    } else if (!s.stored_pid_exists || pidReused(s)) continue;
+    } else if (pidGone(s)) continue;
     const live: LiveSession = {
       engine: harness.engine,
       surface: { surfaceId: s.surface_id, workspaceId: s.workspace_id },
@@ -253,6 +261,63 @@ function pidReused(s: CmuxSession): boolean {
   const launched = s.launch_arguments?.[0];
   const running = s.stored_pid_arguments ?? [];
   return !!launched && running.length > 0 && !running.includes(launched);
+}
+
+// The sessions whose stored pid another process holds now, told by when
+// each started: cmux's hook file records when the session's process did,
+// and ps says when the one now on that pid did, both to the second. This
+// catches what pidReused can't, a record cmux keeps no launch command for,
+// as for Cursor, or a pid gone to another process of the same harness. A
+// session whose start either can't say counts as its own process's.
+async function pidsHandedOn(sessions: CmuxSession[]): Promise<Set<string>> {
+  const asked = sessions.filter(
+    (s) => s.stored_pid_exists && s.pid != null && s.store_path,
+  );
+  const handedOn = new Set<string>();
+  if (asked.length === 0) return handedOn;
+  const recorded = new Map<
+    string,
+    { pid?: number; pidStartSeconds?: number }
+  >();
+  for (const path of new Set(asked.map((s) => s.store_path!))) {
+    try {
+      const { sessions: records } = JSON.parse(await readFile(path, "utf8"));
+      for (const [id, record] of Object.entries(records ?? {})) {
+        recorded.set(id, record as { pid?: number; pidStartSeconds?: number });
+      }
+    } catch {}
+  }
+  const started = new Map<number, number>();
+  try {
+    const pids = [...new Set(asked.map((s) => s.pid!))];
+    const { stdout } = await run(
+      "ps",
+      ["-o", "pid=,lstart=", "-p", pids.join(",")],
+      {
+        env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
+        timeout: 5_000,
+      },
+    );
+    for (const line of stdout.split("\n")) {
+      const m = /^\s*(\d+)\s+(\S.*?)\s*$/.exec(line);
+      const at = m ? Date.parse(`${m[2]} GMT`) : NaN;
+      if (!Number.isNaN(at)) started.set(Number(m![1]), at / 1000);
+    }
+  } catch {}
+  for (const s of asked) {
+    const record = recorded.get(s.session_id);
+    const now = started.get(s.pid!);
+    if (
+      record &&
+      record.pid === s.pid &&
+      typeof record.pidStartSeconds === "number" &&
+      now != null &&
+      Math.floor(record.pidStartSeconds) !== now
+    ) {
+      handedOn.add(s.session_id);
+    }
+  }
+  return handedOn;
 }
 
 // Whether a session still runs, told as the board tells a closed chat:

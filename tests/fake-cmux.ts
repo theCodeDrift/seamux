@@ -62,6 +62,8 @@ export interface FakeSession {
   stored_pid_exists: boolean | null;
   launch_arguments?: string[];
   stored_pid_arguments?: string[];
+  // The hook file holding the record, with when its process started.
+  store_path?: string;
   surface_id: string;
   workspace_id: string;
   cwd?: string;

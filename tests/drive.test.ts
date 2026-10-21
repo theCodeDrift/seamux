@@ -3,6 +3,7 @@
 // board depends on, and each was measured against cmux and Claude Code by
 // hand first (knowledge/); these keep it from drifting.
 
+import { execFileSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
@@ -153,6 +154,57 @@ describe("listLive", () => {
       engine: "cursor",
       lifecycle: "running",
     });
+  });
+
+  // macOS hands a dead chat's pid to the next process, and cmux, which
+  // checks only that some process has it, says it exists again. A Cursor
+  // record has no launch command to compare, so the start cmux's hook file
+  // records for the chat's process tells it from the new one.
+  it("drops a chat whose pid another process holds now", async () => {
+    const started =
+      Date.parse(
+        `${execFileSync("ps", ["-o", "lstart=", "-p", String(process.pid)], {
+          encoding: "utf8",
+          env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
+        }).trim()} GMT`,
+      ) / 1000;
+    const dir = mkdtempSync(join(tmpdir(), "seamux-hooks-"));
+    const store = join(dir, "cursor-hook-sessions.json");
+    writeFileSync(
+      store,
+      JSON.stringify({
+        sessions: {
+          "cursor-own": { pid: process.pid, pidStartSeconds: started },
+          "cursor-handed-on": {
+            pid: process.pid,
+            pidStartSeconds: started - 86_400,
+          },
+        },
+      }),
+    );
+    try {
+      const cursor = {
+        agent: "cursor",
+        active_for_surface: false,
+        pid: process.pid,
+        store_path: store,
+        launch_arguments: [],
+      };
+      cmux.addSession("cursor-handed-on", {
+        ...cursor,
+        started_at: "2026-10-20T01:06:08.124Z",
+        agent_lifecycle: "needsInput",
+      });
+      expect([...(await listLive()).keys()]).toEqual([]);
+
+      cmux.addSession("cursor-own", {
+        ...cursor,
+        started_at: "2026-10-19T01:06:08.124Z",
+      });
+      expect([...(await listLive()).keys()]).toEqual(["cursor-own"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   // cmux moves a resumed Cursor chat to its new surface but keeps the pid it

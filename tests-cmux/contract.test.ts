@@ -6,7 +6,7 @@
 // `npm run test:cmux`, from a cmux terminal. Not in CI.
 
 import { execFileSync } from "node:child_process";
-import { accessSync, constants } from "node:fs";
+import { accessSync, constants, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -276,6 +276,40 @@ describe("the cmux command", () => {
       }
       expect(s.transcript_path ?? null).toSatisfy(
         (v: unknown) => v === null || typeof v === "string",
+      );
+    }
+  });
+
+  // pidsHandedOn(): the hook file each record names keeps when its
+  // session's process started, which a live session's process matches to
+  // the second. Live here is what pidReused already tells: the stored pid
+  // runs the command the session was launched with.
+  it("records when each live session's process started", async () => {
+    const { sessions } = JSON.parse(
+      await cmuxCli(["sessions", "list", "--json"], {
+        maxBuffer: 16 * 1024 * 1024,
+      }),
+    ) as { sessions: Record<string, any>[] };
+    const live = sessions.filter(
+      (s) =>
+        s.stored_pid_exists &&
+        s.launch_arguments?.length &&
+        s.stored_pid_arguments?.includes(s.launch_arguments[0]),
+    );
+    expect(live.length, "a live agent session in cmux").toBeGreaterThan(0);
+    for (const s of live) {
+      expect(s.store_path).toEqual(expect.any(String));
+      const record = JSON.parse(readFileSync(s.store_path, "utf8")).sessions[
+        s.session_id
+      ];
+      expect(record.pid).toBe(s.pid);
+      const started = execFileSync(
+        "ps",
+        ["-o", "lstart=", "-p", String(s.pid)],
+        { encoding: "utf8", env: { ...process.env, LC_ALL: "C", TZ: "UTC" } },
+      ).trim();
+      expect(Math.floor(record.pidStartSeconds)).toBe(
+        Date.parse(`${started} GMT`) / 1000,
       );
     }
   });
