@@ -2,4 +2,4 @@
 "seamux": patch
 ---
 
-Fork can start the new chat in a worktree of its own: tick Worktree beside Fork in a chat's full view, and seamux makes a worktree branched from what the chat has checked out, starts the fork there, and tells it so in its first prompt. Its card shows the new worktree. Before, a fork always ran in its parent's directory, and a fork that made a worktree itself still showed, and ran, in the parent's.
+A chat's full view now offers Fork and Clone side by side. Fork starts the tangent in a new worktree branched from what the chat has checked out, and tells it so in its first prompt, so its card shows the new worktree. Clone starts it in the chat's own folder, as Fork did before. A chat in a worktree shows Fork, with Clone as the copy icon beside it; any other chat shows Clone, with Fork as the fork icon beside it.

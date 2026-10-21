@@ -9,6 +9,7 @@ import {
 import { useFetcher } from "react-router";
 import {
   Check,
+  Copy,
   GitFork,
   Paperclip,
   Pencil,
@@ -47,6 +48,7 @@ import {
 } from "~/lib/board";
 import { ENGINE_FEATURES } from "~/lib/config";
 import { macroLabel } from "~/lib/macro-echo";
+import { projectOf } from "~/lib/project-colors";
 import { queueEditsKey, scrollKey } from "~/lib/sweep";
 import { useCoarsePointer } from "~/lib/use-pointer";
 import { useSessionAction } from "~/lib/use-session-action";
@@ -57,9 +59,25 @@ import { cn } from "~/lib/utils";
 const POLL_MS = 3000;
 // Within this many pixels of the end counts as reading the latest message.
 const AT_END_PX = 40;
-// Whether a fork gets its own worktree, kept for the tab like the dispatch
-// bar's.
-const FORK_WORKTREE_KEY = "seamux:fork:worktree";
+
+// The two ways to split a tangent off a chat: into a new worktree, or a
+// copy in the chat's own folder.
+const FORK = {
+  label: "Fork",
+  busy: "Forking…",
+  icon: <GitFork />,
+  title:
+    "Start a new session with this chat's context and this message, in a new worktree",
+  worktree: true,
+};
+const CLONE = {
+  label: "Clone",
+  busy: "Cloning…",
+  icon: <Copy />,
+  title:
+    "Start a new session with this chat's context and this message, in this chat's folder",
+  worktree: false,
+};
 
 // Full-screen view of one card: the conversation, and room to write the
 // next message. The draft is shared with the card's inline input.
@@ -105,10 +123,19 @@ export function ChatModal({
   title?: ReactNode;
 }) {
   const coarse = useCoarsePointer();
-  const [forkWorktree, setForkWorktree] = useSessionStorage(
-    FORK_WORKTREE_KEY,
-    false,
-  );
+  // A chat already in a worktree forks into a new one by default, and can
+  // be cloned where it is; any other chat is cloned where it is by default,
+  // and can fork into a new worktree.
+  const inWorktree = projectOf(card.cwd) !== card.cwd;
+  const [forkingInto, setForkingInto] = useState(false);
+  const fork = (worktree: boolean) => {
+    setForkingInto(worktree);
+    onFork?.(worktree);
+  };
+  const [primary, secondary] = inWorktree ? [FORK, CLONE] : [CLONE, FORK];
+  const forkBlocked =
+    attachments.length > 0 ? "A fork can't take attachments yet" : null;
+  const forkDisabled = forking || !draft.trim() || forkBlocked !== null;
   const asking = card.waiting?.ask != null;
   const submitKey = useSubmitKey();
   const fetcher = useFetcher<{ messages: ChatMessage[]; total: number }>();
@@ -386,40 +413,35 @@ export function ChatModal({
                   <Paperclip />
                   Attach
                 </Button>
-                {/* Fork and its worktree switch, joined as one control: the
-                switch below Fork from md, beside it under. */}
+                {/* Fork and Clone share a row: whichever suits the chat
+                by name, the other as an icon beside it. */}
                 {onFork && (
-                  <div className="flex rounded-lg border border-border md:flex-col dark:border-input">
+                  <div className="flex">
                     <Button
-                      variant="ghost"
-                      className="rounded-r-none border-0 md:rounded-r-lg md:rounded-b-none"
-                      disabled={
-                        forking || !draft.trim() || attachments.length > 0
-                      }
-                      onClick={() => onFork(forkWorktree)}
-                      title={
-                        attachments.length > 0
-                          ? "A fork can't take attachments yet"
-                          : forkWorktree
-                            ? "Start a new session with this chat's context and this message, in a new worktree"
-                            : "Start a new session with this chat's context and this message"
-                      }
+                      variant="outline"
+                      className="flex-1 rounded-r-none"
+                      disabled={forkDisabled}
+                      onClick={() => fork(primary.worktree)}
+                      title={forkBlocked ?? primary.title}
                     >
-                      <GitFork />
-                      {forking ? "Forking…" : "Fork"}
+                      {primary.icon}
+                      {forking && forkingInto === primary.worktree
+                        ? primary.busy
+                        : primary.label}
                     </Button>
-                    <label
-                      className="flex h-8 shrink-0 cursor-pointer items-center justify-center gap-1.5 border-l border-border px-2.5 text-xs text-muted-foreground hover:text-foreground md:border-t md:border-l-0 dark:border-input"
-                      title="Fork into a new worktree, branched from what this chat has checked out"
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="rounded-l-none border-l-0"
+                      disabled={forkDisabled}
+                      onClick={() => fork(secondary.worktree)}
+                      title={
+                        forkBlocked ?? `${secondary.label}: ${secondary.title}`
+                      }
+                      aria-label={secondary.label}
                     >
-                      <input
-                        type="checkbox"
-                        checked={forkWorktree}
-                        onChange={(e) => setForkWorktree(e.target.checked)}
-                        className="size-3.5 cursor-pointer accent-brand-primary"
-                      />
-                      Worktree
-                    </label>
+                      {secondary.icon}
+                    </Button>
                   </div>
                 )}
                 <Button
