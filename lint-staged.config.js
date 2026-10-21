@@ -3,9 +3,9 @@
 // checks the whole repo with it, since a rule reaches past the files it
 // was staged with.
 export default {
-  "*": (files) => `./.taskless/bin/cli-nightly.mjs check ${files.map((f) => JSON.stringify(f)).join(" ")}`,
+  "*": (files) => `./.taskless/bin/cli.mjs check ${files.map((f) => JSON.stringify(f)).join(" ")}`,
   ".taskless/rules/**": () => [
-    "./.taskless/bin/cli-nightly.mjs verify",
-    "./.taskless/bin/cli-nightly.mjs check",
+    "./.taskless/bin/cli.mjs verify",
+    "./.taskless/bin/cli.mjs check",
   ],
 };

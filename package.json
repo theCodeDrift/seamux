@@ -35,7 +35,7 @@
     "test": "vitest run",
     "test:cmux": "vitest run --config vitest.cmux.config.ts",
     "prepare": "husky",
-    "check": "./.taskless/bin/cli-nightly.mjs verify && ./.taskless/bin/cli-nightly.mjs check"
+    "check": "./.taskless/bin/cli.mjs verify && ./.taskless/bin/cli.mjs check"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

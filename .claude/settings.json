@@ -24,8 +24,6 @@
   },
   "permissions": {
     "allow": [
-      "Bash(npx @taskless/cli-nightly@0.13.3-20261021190126x85025cb *)",
-      "Bash(./.taskless/bin/cli-nightly.mjs *)",
       "Bash(npx @taskless/cli@0.13.3 *)",
       "Bash(./.taskless/bin/cli.mjs *)"
     ]
