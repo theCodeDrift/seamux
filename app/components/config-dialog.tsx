@@ -404,12 +404,12 @@ function TriggerSetting({ trigger }: { trigger: TriggerPhrase }) {
     <section className="flex flex-col gap-2">
       <h3 className="font-medium">Trigger phrase</h3>
       <p className="text-muted-foreground">
-        A prompt in the dispatch bar that ends in this phrase dispatches on its
-        own once it has stayed that way for the wait, so a dictated prompt can
-        be sent by saying so. The phrase itself isn't sent, and case and
-        punctuation don't count. Dispatch counts down meanwhile; any edit
-        starts it over, and taking the phrase off stops it. Leave it empty to
-        turn this off.
+        A prompt in the dispatch bar, or a reply in a chat, that you type to end
+        in this phrase goes on its own once it has stayed that way for the wait,
+        so a dictated message can be sent by saying so. The phrase itself isn't
+        sent, and case and punctuation don't count. The send button counts down
+        meanwhile; any edit starts it over, and taking the phrase off stops it.
+        Leave it empty to turn this off.
       </p>
       <form
         className="flex flex-wrap items-center gap-2"
@@ -507,18 +507,18 @@ function DebugTab({
         >
           Blurs what each chat says, where it runs and when: names, paths,
           branches, how long ago, prompts, replies, questions and open files,
-          leaving the board's
-          layout, columns and controls readable. For sharing a screenshot or
-          attaching one to a bug report. Kept in this browser only.
+          leaving the board's layout, columns and controls readable. For sharing
+          a screenshot or attaching one to a bug report. Kept in this browser
+          only.
         </SwitchRow>
       </section>
       <DiagnosticsSetting {...diagnostics} />
       <section className="flex flex-col gap-2">
         <h3 className="font-medium">Autocomplete</h3>
         <p className="text-muted-foreground">
-          Slash commands are listed once per folder and kept for ten minutes,
-          or until <code>/reload-skills</code> is sent from the board. Clear
-          them to list every folder's commands again the next time you type{" "}
+          Slash commands are listed once per folder and kept for ten minutes, or
+          until <code>/reload-skills</code> is sent from the board. Clear them
+          to list every folder's commands again the next time you type{" "}
           <code>/</code>.
         </p>
         <div className="flex items-center gap-2">
@@ -562,7 +562,11 @@ function ClearThemesSetting({ themes }: { themes: number }) {
               <Trash2 />
               Remove {themes} {themes === 1 ? "theme" : "themes"}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setConfirming(false)}
+            >
               Cancel
             </Button>
           </>
@@ -630,8 +634,8 @@ function DiagnosticsSetting({ enabled, setEnabled, send, last }: Diagnostics) {
       >
         A snapshot of the screen size, media queries, stylesheets, and every
         column's and card's size and computed style, sent when the board loads,
-        when the window is resized or turned, and on demand. Saved on the Mac
-        in <code>data/diagnostics/</code>, for triage from a phone.
+        when the window is resized or turned, and on demand. Saved on the Mac in{" "}
+        <code>data/diagnostics/</code>, for triage from a phone.
       </SwitchRow>
       {enabled && (
         <div className="flex items-center gap-2">
@@ -641,7 +645,9 @@ function DiagnosticsSetting({ enabled, setEnabled, send, last }: Diagnostics) {
           </Button>
           {last && (
             <span
-              className={last.error ? "text-destructive" : "text-muted-foreground"}
+              className={
+                last.error ? "text-destructive" : "text-muted-foreground"
+              }
             >
               {last.error
                 ? `Failed at ${last.at}: ${last.error}`
@@ -868,9 +874,8 @@ function MdnsSetting({
         </a>
         . Turning this on lets the board accept more than the 127.0.0.1
         loopback: it listens on every network this Mac joins, and restarts to do
-        so. Every request is asked for SEAMUX_USER and SEAMUX_PASS, which
-        plain HTTP sends unencrypted, so use it on networks you trust.{" "}
-        {state}
+        so. Every request is asked for SEAMUX_USER and SEAMUX_PASS, which plain
+        HTTP sends unencrypted, so use it on networks you trust. {state}
         {mdns.viaLan &&
           " You're viewing this over the network, so turning it off disconnects this page."}
       </SwitchRow>
@@ -917,8 +922,8 @@ function TunnelSetting({
           Cloudflare Access. Through the tunnel the board asks for no password
           of its own: it checks every request's Access token instead, and
           refuses any request without a valid one, so it stays shut even if the
-          Access application is removed. The tunnel's hostname is answered
-          only for cloudflared, on this Mac, even with mDNS on.
+          Access application is removed. The tunnel's hostname is answered only
+          for cloudflared, on this Mac, even with mDNS on.
         </p>
         <SwitchRow
           checked={remote.wanted}
@@ -998,13 +1003,7 @@ const REMOTE_VARIABLES = [
 // the right. Kept in seamux's store and shown on every board. The chosen
 // one is previewed on this browser until the tab closes; Make active shows
 // it on every board.
-function ThemesTab({
-  theme,
-  local,
-}: {
-  theme: ThemeStatus;
-  local: boolean;
-}) {
+function ThemesTab({ theme, local }: { theme: ThemeStatus; local: boolean }) {
   const [selected, setSelected] = useState<string | null>(theme.active.name);
   const [adding, setAdding] = useState(false);
   // A theme file's fields, for the new theme's editor to start from, and
@@ -1069,7 +1068,9 @@ function ThemesTab({
                   <span className="flex w-full items-center gap-1">
                     <span className="min-w-0 flex-1 truncate">{t.label}</span>
                     {theme.active.name === t.name ? (
-                      <span className="text-xs text-muted-foreground">active</span>
+                      <span className="text-xs text-muted-foreground">
+                        active
+                      </span>
                     ) : (
                       previewed === t.name && (
                         <span className="text-xs text-muted-foreground">
@@ -1088,57 +1089,58 @@ function ThemesTab({
           {/* Each button's word shows where the list is wide enough for
               all three, as on a phone; in the narrow column, only + and −. */}
           <div className="@container">
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              aria-label="Add"
-              title="Add a theme"
-              onClick={() => {
-                setImported(null);
-                setImportNote(null);
-                setAdding(true);
-                setSelected(null);
-              }}
-            >
-              <Plus />
-              <span className="hidden @[17rem]:inline">Add</span>
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              aria-label="Import"
-              title="Import a theme file"
-              onClick={() => fileInput.current?.click()}
-            >
-              <Upload />
-              <span className="hidden @[17rem]:inline">Import</span>
-            </Button>
-            <input
-              ref={fileInput}
-              type="file"
-              accept=".json,application/json"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = "";
-                if (file) void importFile(file);
-              }}
-            />
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label="Remove"
-              title="Remove this theme"
-              disabled={!current || adding || remover.pending}
-              onClick={() =>
-                current && remover.submit("remove-theme", { name: current.name })
-              }
-            >
-              <Minus />
-              <span className="hidden @[17rem]:inline">Remove</span>
-            </Button>
-          </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label="Add"
+                title="Add a theme"
+                onClick={() => {
+                  setImported(null);
+                  setImportNote(null);
+                  setAdding(true);
+                  setSelected(null);
+                }}
+              >
+                <Plus />
+                <span className="hidden @[17rem]:inline">Add</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label="Import"
+                title="Import a theme file"
+                onClick={() => fileInput.current?.click()}
+              >
+                <Upload />
+                <span className="hidden @[17rem]:inline">Import</span>
+              </Button>
+              <input
+                ref={fileInput}
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) void importFile(file);
+                }}
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label="Remove"
+                title="Remove this theme"
+                disabled={!current || adding || remover.pending}
+                onClick={() =>
+                  current &&
+                  remover.submit("remove-theme", { name: current.name })
+                }
+              >
+                <Minus />
+                <span className="hidden @[17rem]:inline">Remove</span>
+              </Button>
+            </div>
           </div>
           {remover.error && <p className="text-destructive">{remover.error}</p>}
           {importNote && (
@@ -1184,14 +1186,16 @@ function BuiltInTheme({ active }: { active: boolean }) {
         seamux's own colours, from the mark's cyan to indigo. A theme needs only
         its two brand colours, <code>--brand-primary</code> and{" "}
         <code>--brand-secondary</code>: the rest of its palette is worked out
-        from them, and anything else it sets replaces what was worked out.
-        Leave out light or dark and it's made from the other's brand.
+        from them, and anything else it sets replaces what was worked out. Leave
+        out light or dark and it's made from the other's brand.
       </p>
       <div className="flex items-center gap-2">
         <Button
           size="sm"
           disabled={active || action.pending}
-          onClick={() => action.submit("activate-theme", { name: DEFAULT_THEME })}
+          onClick={() =>
+            action.submit("activate-theme", { name: DEFAULT_THEME })
+          }
         >
           <Check />
           {active ? "Active" : "Make active"}

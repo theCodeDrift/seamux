@@ -52,6 +52,7 @@ import {
   ENGINE_CORNER,
 } from "~/components/card-edge";
 import { ChatModal } from "~/components/chat-modal";
+import { countdownTitle, CountdownRing } from "~/components/countdown";
 import { CmuxProblem } from "~/components/cmux-problem";
 import {
   attachmentLabel,
@@ -145,6 +146,12 @@ import {
 } from "~/lib/sweep";
 import { useLocalStorage, useSessionStorage } from "~/lib/use-session-storage";
 import { useDebounce } from "~/lib/use-debounce";
+import {
+  DEFAULT_TRIGGER,
+  stripTrigger,
+  type TriggerPhrase,
+} from "~/lib/trigger-phrase";
+import { useTrigger } from "~/lib/use-trigger";
 import { cn } from "~/lib/utils";
 
 const POLL_MS = 3000;
@@ -357,11 +364,14 @@ const DraftsContext = createContext<{
     sessionId: string,
     update: (list: Attachment[]) => Attachment[],
   ) => void;
+  // The phrase that sends a reply typed to end in it.
+  trigger: TriggerPhrase;
 }>({
   drafts: {},
   setDraft: () => {},
   attachments: {},
   updateAttachments: () => {},
+  trigger: DEFAULT_TRIGGER,
 });
 
 // The card's next chat line, with a popout into the full-size modal for
@@ -411,10 +421,13 @@ function ChatInput({
   // A draft is cleared, from state and storage, as it is sent, so a reload
   // mid-send can't bring it back; a failure puts it back.
   const sent = useRef("");
+  // The trigger phrase never goes with the message, however it is sent.
+  const { trigger } = useContext(DraftsContext);
+  const outgoing = stripTrigger(draft, trigger.phrase) ?? draft;
   const takeDraft = () => {
     sent.current = draft;
     putDraft("");
-    return draft;
+    return outgoing;
   };
   const released = useCallback(() => {
     releaseFocus(`reply:${card.sessionId}`);
@@ -484,7 +497,7 @@ function ChatInput({
   }, [started, restore]);
   const forker = useSessionAction(card.sessionId, forked, forkFailed);
   const fork = (worktree: boolean) => {
-    if (!draft.trim()) return;
+    if (!outgoing.trim()) return;
     const text = takeDraft();
     forking.current = spawn({
       name: text,
@@ -495,7 +508,7 @@ function ChatInput({
     });
     forker.submit("fork", worktree ? { text, worktree: "on" } : { text });
   };
-  const canSend = card.drivable && !pending && draft.trim().length > 0;
+  const canSend = card.drivable && !pending && outgoing.trim().length > 0;
   const queueing = card.column === "working" || card.boardQueue.length > 0;
   const asking = card.waiting?.ask != null;
   const send = () =>
@@ -512,6 +525,15 @@ function ChatInput({
   // sending: a long message waiting to go is visible at a glance.
   const lines = draft.split("\n").length;
   const multiline = lines > 1;
+  // Typed here to end in the trigger phrase, it sends on its own; the
+  // modal counts down for what is typed there.
+  const { left, typed } = useTrigger({
+    text: draft,
+    outgoing,
+    seconds: trigger.seconds,
+    ready: canSend && !open && !multiline,
+    fire: send,
+  });
   const form = useRef<HTMLFormElement>(null);
   const slash = useSlashMenu({
     sessionId: card.sessionId,
@@ -588,7 +610,10 @@ function ChatInput({
               <input
                 data-focus-key={`reply:${card.sessionId}`}
                 value={multiline ? draft.split("\n")[0] : draft}
-                onChange={(e) => onDraftChange(e.target.value)}
+                onChange={(e) => {
+                  onDraftChange(e.target.value);
+                  typed(e.target.value);
+                }}
                 onKeyDown={slash.onKeyDown}
                 onClick={multiline ? () => setOpen(true) : undefined}
                 readOnly={multiline}
@@ -623,10 +648,18 @@ function ChatInput({
                   size="icon-xs"
                   disabled={!canSend}
                   title={
-                    queueing ? "Queue, to send once this turn ends" : "Send"
+                    left !== null
+                      ? countdownTitle(left, queueing ? "Queue" : "Send")
+                      : queueing
+                        ? "Queue, to send once this turn ends"
+                        : "Send"
                   }
                 >
-                  <SendHorizontal />
+                  {left === null ? (
+                    <SendHorizontal />
+                  ) : (
+                    <CountdownRing left={left} />
+                  )}
                 </Button>
               )}
             </form>
@@ -651,6 +684,8 @@ function ChatInput({
         onDetach={detach}
         onSend={send}
         canSend={canSend}
+        outgoing={outgoing}
+        trigger={trigger}
         queueing={queueing}
         pending={pending}
         error={error ?? forker.error}
@@ -2153,9 +2188,18 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       }),
     [],
   );
+  // Kept by value, since every poll brings a new copy of the config.
+  const { phrase, seconds } = config.triggerPhrase;
+  const trigger = useMemo(() => ({ phrase, seconds }), [phrase, seconds]);
   const draftsContext = useMemo(
-    () => ({ drafts, setDraft, attachments, updateAttachments }),
-    [drafts, setDraft, attachments, updateAttachments],
+    () => ({
+      drafts,
+      setDraft,
+      attachments,
+      updateAttachments,
+      trigger,
+    }),
+    [drafts, setDraft, attachments, updateAttachments, trigger],
   );
   // What this browser keeps for a chat, its draft, files, and stored view,
   // goes once the chat has been gone from the board for long enough.

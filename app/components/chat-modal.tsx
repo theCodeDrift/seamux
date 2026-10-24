@@ -28,6 +28,7 @@ import {
 } from "~/components/ui/dialog";
 import { EDGE, EDGE_FRAME, ENGINE_CORNER } from "~/components/card-edge";
 import { ContextBar } from "~/components/context-bar";
+import { countdownTitle, SendIcon, StackedLabel } from "~/components/countdown";
 import { Markdown } from "~/components/markdown";
 import { useSlashMenu } from "~/components/slash-menu";
 import { SubagentDetail } from "~/components/subagent-list";
@@ -49,10 +50,12 @@ import {
 import { ENGINE_FEATURES } from "~/lib/config";
 import { macroLabel } from "~/lib/macro-echo";
 import { projectOf } from "~/lib/project-colors";
+import type { TriggerPhrase } from "~/lib/trigger-phrase";
 import { queueEditsKey, scrollKey } from "~/lib/sweep";
 import { useCoarsePointer } from "~/lib/use-pointer";
 import { useSessionAction } from "~/lib/use-session-action";
 import { useSessionStorage } from "~/lib/use-session-storage";
+import { useTrigger } from "~/lib/use-trigger";
 import { keyHint, useSubmitKey } from "~/lib/use-submit-key";
 import { cn } from "~/lib/utils";
 
@@ -92,6 +95,8 @@ export function ChatModal({
   onDetach,
   onSend,
   canSend,
+  outgoing,
+  trigger,
   queueing,
   pending,
   error,
@@ -111,6 +116,9 @@ export function ChatModal({
   onDetach: (label: string) => void;
   onSend: () => void;
   canSend: boolean;
+  // The draft without the trigger phrase, which never goes with it.
+  outgoing: string;
+  trigger: TriggerPhrase;
   queueing: boolean;
   pending: boolean;
   error: string | null;
@@ -251,6 +259,15 @@ export function ChatModal({
     onOpenChange(false);
   };
 
+  // Typed here to end in the trigger phrase, it sends on its own.
+  const { left, typed } = useTrigger({
+    text: draft,
+    outgoing,
+    seconds: trigger.seconds,
+    ready: open && canSend,
+    fire: send,
+  });
+
   const workers = workerCount(card.fanouts);
   const rail = workers > 0 || card.subagents.length > 0;
 
@@ -345,7 +362,10 @@ export function ChatModal({
                   ref={input}
                   data-focus-key={`chat:${card.sessionId}`}
                   value={draft}
-                  onChange={(e) => onDraftChange(e.target.value)}
+                  onChange={(e) => {
+                    onDraftChange(e.target.value);
+                    typed(e.target.value);
+                  }}
                   // Files on the clipboard or dropped in are attached; a paste
                   // of anything else is text as usual.
                   onPaste={(e) => {
@@ -448,19 +468,21 @@ export function ChatModal({
                   disabled={!canSend}
                   onClick={send}
                   title={
-                    queueing
-                      ? `Queue, to send once this turn ends${keyHint(submitKey)}`
-                      : `Send${keyHint(submitKey)}`
+                    left !== null
+                      ? countdownTitle(left, queueing ? "Queue" : "Send")
+                      : queueing
+                        ? `Queue, to send once this turn ends${keyHint(submitKey)}`
+                        : `Send${keyHint(submitKey)}`
                   }
                 >
-                  <SendHorizontal />
-                  {pending
-                    ? queueing
-                      ? "Queueing…"
-                      : "Sending…"
-                    : queueing
-                      ? "Queue"
-                      : "Send"}
+                  <SendIcon left={left} icon={<SendHorizontal />} />
+                  <StackedLabel
+                    labels={[
+                      [queueing ? "Queue" : "Send", !pending && left === null],
+                      [queueing ? "Queueing…" : "Sending…", pending],
+                      [String(left ?? trigger.seconds), left !== null],
+                    ]}
+                  />
                 </Button>
               </div>
             </div>

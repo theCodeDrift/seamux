@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
-import { LoaderCircle, Paperclip, SendHorizontal } from "lucide-react";
+import { Paperclip, SendHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
 import { AttachmentChips } from "~/components/attachments";
+import { countdownTitle, SendIcon, StackedLabel } from "~/components/countdown";
 import { DirectoryPicker } from "~/components/directory-picker";
 import { LoadedConfirm } from "~/components/memory-pressure";
 
@@ -24,7 +25,7 @@ import { useOptimistic } from "~/lib/optimistic";
 import { stripTrigger, type TriggerPhrase } from "~/lib/trigger-phrase";
 import { releaseFocus } from "~/lib/use-focus-restore";
 import { useSessionStorage } from "~/lib/use-session-storage";
-import { cn } from "~/lib/utils";
+import { useTrigger } from "~/lib/use-trigger";
 import { keyHint, useSubmitKey } from "~/lib/use-submit-key";
 import type { DispatchResult } from "~/routes/dispatch";
 
@@ -203,17 +204,25 @@ export function DispatchBar({
   const options =
     directories.length > 0 ? directories : (dirs.data?.directories ?? []);
 
-  const canDispatch = !pending && prompt.trim() !== "" && cwd.trim() !== "";
+  // The trigger phrase never goes with the prompt, however it is sent.
+  const outgoing = stripTrigger(prompt, trigger.phrase) ?? prompt;
+  const canDispatch = !pending && outgoing.trim() !== "" && cwd.trim() !== "";
   const [confirming, setConfirming] = useState(false);
   const submit = () => {
     if (!canDispatch) return;
     if (memory === "critical") setConfirming(true);
     else send();
   };
-  // The trigger phrase never goes with the prompt, however it was sent.
-  const outgoing = stripTrigger(prompt, trigger.phrase) ?? prompt;
+  // A prompt typed to end in the trigger phrase dispatches on its own.
+  const { left, typed } = useTrigger({
+    text: prompt,
+    outgoing,
+    seconds: trigger.seconds,
+    ready: canDispatch && !confirming,
+    fire: submit,
+  });
   const send = () => {
-    if (!canDispatch || outgoing.trim() === "") return;
+    if (!canDispatch) return;
     sent.current = prompt;
     setPrompt("");
     spawning.current = spawn({
@@ -240,40 +249,16 @@ export function DispatchBar({
     });
   };
 
-  // Counts down while the prompt ends in the trigger phrase, starting over
-  // at every edit, and dispatches at zero.
-  const armed =
-    canDispatch &&
-    !confirming &&
-    outgoing !== prompt &&
-    outgoing.trim() !== "";
-  const [left, setLeft] = useState<number | null>(null);
-  const fire = useRef(submit);
-  fire.current = submit;
-  useEffect(() => {
-    if (!armed) {
-      setLeft(null);
-      return;
-    }
-    let n = trigger.seconds;
-    setLeft(n);
-    const tick = setInterval(() => {
-      n -= 1;
-      if (n > 0) return setLeft(n);
-      clearInterval(tick);
-      setLeft(null);
-      fire.current();
-    }, 1000);
-    return () => clearInterval(tick);
-  }, [armed, prompt, cwd, trigger.seconds]);
-
   return (
     <section className="flex flex-col gap-2 rounded-xl border bg-card p-2 shadow-sm transition-shadow focus-within:border-ring/60 focus-within:ring-3 focus-within:ring-ring/15">
       <Textarea
         ref={promptRef}
         data-focus-key="dispatch:prompt"
         value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
+        onChange={(e) => {
+          setPrompt(e.target.value);
+          typed(e.target.value);
+        }}
         // Files on the clipboard or dropped in are attached; a paste of
         // anything else is text as usual.
         onPaste={(e) => {
@@ -374,38 +359,17 @@ export function DispatchBar({
           <Button
             disabled={!canDispatch}
             onClick={submit}
-            title={
-              left === null
-                ? undefined
-                : `Dispatching in ${left}s. Edit the prompt to stop it, or click to dispatch now`
-            }
+            title={left === null ? undefined : countdownTitle(left, "Dispatch")}
             className="bg-brand-ramp text-brand-foreground shadow-sm hover:opacity-90"
           >
-            {left === null ? (
-              <SendHorizontal />
-            ) : (
-              <LoaderCircle className="animate-spin" />
-            )}
-            {/* Every label in one cell, all but the current one hidden, so
-                the button keeps its width as they change. */}
-            <span className="grid">
-              {[
+            <SendIcon left={left} icon={<SendHorizontal />} />
+            <StackedLabel
+              labels={[
                 ["Dispatch", !pending && left === null],
                 ["Starting…", pending],
-                [`${left ?? trigger.seconds}`, left !== null],
-              ].map(([label, shown]) => (
-                <span
-                  key={String(label)}
-                  aria-hidden={!shown}
-                  className={cn(
-                    "col-start-1 row-start-1 text-center tabular-nums",
-                    !shown && "invisible",
-                  )}
-                >
-                  {label}
-                </span>
-              ))}
-            </span>
+                [String(left ?? trigger.seconds), left !== null],
+              ]}
+            />
           </Button>
         </div>
       </div>
