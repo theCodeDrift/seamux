@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
-import { Paperclip, SendHorizontal } from "lucide-react";
+import { LoaderCircle, Paperclip, SendHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
 import { AttachmentChips } from "~/components/attachments";
@@ -21,8 +21,10 @@ import {
 import type { MemoryPressure } from "~/lib/board";
 import { ENGINE_LABELS, ENGINES, type Engine } from "~/lib/config";
 import { useOptimistic } from "~/lib/optimistic";
+import { stripTrigger, type TriggerPhrase } from "~/lib/trigger-phrase";
 import { releaseFocus } from "~/lib/use-focus-restore";
 import { useSessionStorage } from "~/lib/use-session-storage";
+import { cn } from "~/lib/utils";
 import { keyHint, useSubmitKey } from "~/lib/use-submit-key";
 import type { DispatchResult } from "~/routes/dispatch";
 
@@ -52,6 +54,7 @@ export function DispatchBar({
   directories,
   worktreeByDefault,
   defaultEngine,
+  trigger,
   engines,
   memory,
   onDispatched,
@@ -60,6 +63,9 @@ export function DispatchBar({
   directories: string[];
   worktreeByDefault: boolean;
   defaultEngine: Engine;
+  // A prompt ending in this phrase dispatches on its own once it has sat
+  // that way this long.
+  trigger: TriggerPhrase;
   // Which agents this Mac can launch.
   engines: Record<Engine, boolean>;
   // How hard macOS is pressed for memory: at critical, asked before sending.
@@ -204,20 +210,22 @@ export function DispatchBar({
     if (memory === "critical") setConfirming(true);
     else send();
   };
+  // The trigger phrase never goes with the prompt, however it was sent.
+  const outgoing = stripTrigger(prompt, trigger.phrase) ?? prompt;
   const send = () => {
-    if (!canDispatch) return;
+    if (!canDispatch || outgoing.trim() === "") return;
     sent.current = prompt;
     setPrompt("");
     spawning.current = spawn({
-      name: prompt.trim(),
+      name: outgoing.trim(),
       cwd: cwd.trim(),
-      intent: prompt.trim(),
+      intent: outgoing.trim(),
       engine: chosen,
       forked: false,
     });
     // Attachments go as files, each with the label it has in the prompt.
     const form = new FormData();
-    form.set("prompt", prompt);
+    form.set("prompt", outgoing);
     form.set("cwd", cwd.trim());
     form.set("engine", chosen);
     if (worktree) form.set("worktree", "on");
@@ -231,6 +239,33 @@ export function DispatchBar({
       encType: "multipart/form-data",
     });
   };
+
+  // Counts down while the prompt ends in the trigger phrase, starting over
+  // at every edit, and dispatches at zero.
+  const armed =
+    canDispatch &&
+    !confirming &&
+    outgoing !== prompt &&
+    outgoing.trim() !== "";
+  const [left, setLeft] = useState<number | null>(null);
+  const fire = useRef(submit);
+  fire.current = submit;
+  useEffect(() => {
+    if (!armed) {
+      setLeft(null);
+      return;
+    }
+    let n = trigger.seconds;
+    setLeft(n);
+    const tick = setInterval(() => {
+      n -= 1;
+      if (n > 0) return setLeft(n);
+      clearInterval(tick);
+      setLeft(null);
+      fire.current();
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [armed, prompt, cwd, trigger.seconds]);
 
   return (
     <section className="flex flex-col gap-2 rounded-xl border bg-card p-2 shadow-sm transition-shadow focus-within:border-ring/60 focus-within:ring-3 focus-within:ring-ring/15">
@@ -339,10 +374,38 @@ export function DispatchBar({
           <Button
             disabled={!canDispatch}
             onClick={submit}
+            title={
+              left === null
+                ? undefined
+                : `Dispatching in ${left}s. Edit the prompt to stop it, or click to dispatch now`
+            }
             className="bg-brand-ramp text-brand-foreground shadow-sm hover:opacity-90"
           >
-            <SendHorizontal />
-            {pending ? "Starting…" : "Dispatch"}
+            {left === null ? (
+              <SendHorizontal />
+            ) : (
+              <LoaderCircle className="animate-spin" />
+            )}
+            {/* Every label in one cell, all but the current one hidden, so
+                the button keeps its width as they change. */}
+            <span className="grid">
+              {[
+                ["Dispatch", !pending && left === null],
+                ["Starting…", pending],
+                [`${left ?? trigger.seconds}`, left !== null],
+              ].map(([label, shown]) => (
+                <span
+                  key={String(label)}
+                  aria-hidden={!shown}
+                  className={cn(
+                    "col-start-1 row-start-1 text-center tabular-nums",
+                    !shown && "invisible",
+                  )}
+                >
+                  {label}
+                </span>
+              ))}
+            </span>
           </Button>
         </div>
       </div>

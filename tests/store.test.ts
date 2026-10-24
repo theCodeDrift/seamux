@@ -98,3 +98,15 @@ it("keeps project colours, and takes a browser's only where none is set", () => 
   expect(config.readConfig().projectColors).toEqual({ "/r/two": 2 });
   expect(() => config.setProjectColor("/r/one", 13)).toThrow();
 });
+
+it("keeps the trigger phrase, and drops the key back at the default", () => {
+  config.setTriggerPhrase("  Engage   now ", 3);
+  expect(config.readConfig().triggerPhrase).toEqual({
+    phrase: "Engage now",
+    seconds: 3,
+  });
+  expect(() => config.setTriggerPhrase("engage", 0)).toThrow();
+  expect(() => config.setTriggerPhrase("engage", 2.5)).toThrow();
+  config.setTriggerPhrase("make it so", 7);
+  expect(store.readValue("triggerPhrase")).toBeUndefined();
+});

@@ -57,6 +57,13 @@ import {
 import type { ThemeStatus } from "~/lib/theme.server";
 import { previewColor, previewTheme } from "~/lib/use-theme";
 import type { Notifications } from "~/components/waiting-alerts";
+import {
+  DEFAULT_TRIGGER,
+  MAX_TRIGGER_PHRASE,
+  MAX_TRIGGER_SECONDS,
+  MIN_TRIGGER_SECONDS,
+  type TriggerPhrase,
+} from "~/lib/trigger-phrase";
 import type { Blur } from "~/lib/use-blur";
 import type { Diagnostics } from "~/lib/use-diagnostics";
 import { cn } from "~/lib/utils";
@@ -214,6 +221,7 @@ function GeneralTab({
     <div className="flex flex-col gap-6">
       <EngineSetting current={config.defaultEngine} installed={engines} />
       <WorktreeSetting on={config.worktreeByDefault} />
+      <TriggerSetting trigger={config.triggerPhrase} />
       <NotificationSetting {...notifications} />
       {/* Last, since the list can grow long. */}
       <DirectoriesSetting directories={config.directories} />
@@ -373,6 +381,83 @@ function WorktreeSetting({ on }: { on: boolean }) {
           </span>
         </span>
       </label>
+      {action.error && <p className="text-destructive">{action.error}</p>}
+    </section>
+  );
+}
+
+function TriggerSetting({ trigger }: { trigger: TriggerPhrase }) {
+  const action = useConfigAction();
+  const [phrase, setPhrase] = useState(trigger.phrase);
+  const [seconds, setSeconds] = useState(String(trigger.seconds));
+  // Follows the saved value once it changes, as after a reset.
+  useEffect(() => {
+    setPhrase(trigger.phrase);
+    setSeconds(String(trigger.seconds));
+  }, [trigger.phrase, trigger.seconds]);
+  const changed =
+    phrase !== trigger.phrase || seconds !== String(trigger.seconds);
+  const isDefault =
+    trigger.phrase === DEFAULT_TRIGGER.phrase &&
+    trigger.seconds === DEFAULT_TRIGGER.seconds;
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="font-medium">Trigger phrase</h3>
+      <p className="text-muted-foreground">
+        A prompt in the dispatch bar that ends in this phrase dispatches on its
+        own once it has stayed that way for the wait, so a dictated prompt can
+        be sent by saying so. The phrase itself isn't sent, and case and
+        punctuation don't count. Dispatch counts down meanwhile; any edit
+        starts it over, and taking the phrase off stops it. Leave it empty to
+        turn this off.
+      </p>
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          action.submit("trigger-phrase", { phrase, seconds });
+        }}
+      >
+        <input
+          value={phrase}
+          onChange={(e) => setPhrase(e.target.value)}
+          maxLength={MAX_TRIGGER_PHRASE}
+          placeholder="Off"
+          aria-label="Trigger phrase"
+          className="min-w-0 flex-1 rounded-md border bg-transparent px-2 py-1 text-sm"
+        />
+        <label className="flex items-center gap-1 text-muted-foreground">
+          <input
+            type="number"
+            inputMode="numeric"
+            min={MIN_TRIGGER_SECONDS}
+            max={MAX_TRIGGER_SECONDS}
+            step={1}
+            value={seconds}
+            onChange={(e) => setSeconds(e.target.value)}
+            aria-label="Seconds to wait"
+            className="w-16 rounded-md border bg-transparent px-2 py-1 text-sm text-foreground"
+          />
+          seconds
+        </label>
+        <Button type="submit" size="sm" disabled={action.pending || !changed}>
+          Save
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={action.pending || isDefault}
+          onClick={() =>
+            action.submit("trigger-phrase", {
+              phrase: DEFAULT_TRIGGER.phrase,
+              seconds: String(DEFAULT_TRIGGER.seconds),
+            })
+          }
+        >
+          Reset
+        </Button>
+      </form>
       {action.error && <p className="text-destructive">{action.error}</p>}
     </section>
   );

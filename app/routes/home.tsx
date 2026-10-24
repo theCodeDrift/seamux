@@ -2317,6 +2317,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 directories={config.directories}
                 worktreeByDefault={config.worktreeByDefault}
                 defaultEngine={config.defaultEngine}
+                trigger={config.triggerPhrase}
                 engines={engines}
                 memory={board.memory?.pressure ?? null}
                 onDispatched={() => setDispatchOpen(false)}

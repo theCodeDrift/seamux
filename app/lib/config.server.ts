@@ -12,6 +12,13 @@ import {
   type Config,
   type MacroName,
 } from "./config.ts";
+import {
+  DEFAULT_TRIGGER,
+  MAX_TRIGGER_PHRASE,
+  MAX_TRIGGER_SECONDS,
+  MIN_TRIGGER_SECONDS,
+  readTrigger,
+} from "./trigger-phrase.ts";
 import { storedSlot } from "./project-colors.ts";
 import { readValue, updateValue, writeValue } from "./store.server.ts";
 
@@ -39,6 +46,7 @@ export function readConfig(): Config {
       const engine = get<string>("defaultEngine", DEFAULT_CONFIG.defaultEngine);
       return isEngine(engine) ? engine : DEFAULT_CONFIG.defaultEngine;
     })(),
+    triggerPhrase: readTrigger(get("triggerPhrase", null)),
     macros,
     projectColors: readProjectColors(get("projectColors", null)),
   };
@@ -78,6 +86,25 @@ export function setDefaultEngine(engine: string) {
     "defaultEngine",
     engine === DEFAULT_CONFIG.defaultEngine ? undefined : engine,
   );
+}
+
+// An empty phrase turns it off.
+export function setTriggerPhrase(phrase: string, seconds: number) {
+  phrase = phrase.trim().replace(/\s+/g, " ");
+  if (phrase.length > MAX_TRIGGER_PHRASE)
+    throw new Error("That trigger phrase is too long");
+  if (
+    !Number.isInteger(seconds) ||
+    seconds < MIN_TRIGGER_SECONDS ||
+    seconds > MAX_TRIGGER_SECONDS
+  ) {
+    throw new Error(
+      `Wait between ${MIN_TRIGGER_SECONDS} and ${MAX_TRIGGER_SECONDS} seconds`,
+    );
+  }
+  const same =
+    phrase === DEFAULT_TRIGGER.phrase && seconds === DEFAULT_TRIGGER.seconds;
+  put("triggerPhrase", same ? undefined : { phrase, seconds });
 }
 
 export function isMacroName(name: string): name is MacroName {

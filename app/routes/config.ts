@@ -9,6 +9,7 @@ import {
   setDefaultEngine,
   setMacro,
   setProjectColor,
+  setTriggerPhrase,
   setWorktreeByDefault,
 } from "~/lib/config.server";
 import { forgetCommands } from "~/lib/commands.server";
@@ -35,6 +36,7 @@ const INTENTS = new Set([
   "remove-directory",
   "worktree-default",
   "default-engine",
+  "trigger-phrase",
   "save-macro",
   "reset-macro",
   "remote",
@@ -65,6 +67,8 @@ async function perform(intent: string, form: FormData, request: Request) {
     setWorktreeByDefault(field("on") === "true");
   } else if (intent === "default-engine") {
     setDefaultEngine(field("engine"));
+  } else if (intent === "trigger-phrase") {
+    setTriggerPhrase(field("phrase"), Number(field("seconds")));
   } else if (intent === "save-macro" || intent === "reset-macro") {
     const name = field("name");
     if (!isMacroName(name)) throw new Error("Unknown macro");

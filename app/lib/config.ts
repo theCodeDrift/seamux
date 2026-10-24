@@ -1,6 +1,8 @@
 // seamux's own settings, set from the board's config dialog. Safe to import
 // from client and server, and from scripts Node runs directly.
 
+import { DEFAULT_TRIGGER, type TriggerPhrase } from "./trigger-phrase.ts";
+
 // System macros: text the dispatcher sends into a session as a user prompt,
 // at a fixed point in its life.
 export const MACRO_NAMES = [
@@ -166,6 +168,8 @@ export interface Config {
   worktreeByDefault: boolean;
   // What the dispatch bar launches unless it is switched for one dispatch.
   defaultEngine: Engine;
+  // The phrase that dispatches a prompt ending in it, and how long after.
+  triggerPhrase: TriggerPhrase;
   macros: Record<MacroName, { text: string; custom: boolean }>;
   // Colour slots picked for projects, by project path
   // (app/lib/project-colors.ts). A project not here gets a hashed slot.
@@ -177,6 +181,7 @@ export const DEFAULT_CONFIG: Config = {
   projectColors: {},
   worktreeByDefault: false,
   defaultEngine: "claude",
+  triggerPhrase: DEFAULT_TRIGGER,
   macros: Object.fromEntries(
     MACRO_NAMES.map((name) => [
       name,
