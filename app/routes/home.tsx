@@ -52,7 +52,11 @@ import {
   ENGINE_CORNER,
 } from "~/components/card-edge";
 import { ChatModal } from "~/components/chat-modal";
-import { countdownTitle, CountdownRing } from "~/components/countdown";
+import {
+  COUNTING,
+  countdownTitle,
+  CountdownRing,
+} from "~/components/countdown";
 import { CmuxProblem } from "~/components/cmux-problem";
 import {
   attachmentLabel,
@@ -647,6 +651,7 @@ function ChatInput({
                   type="submit"
                   size="icon-xs"
                   disabled={!canSend}
+                  className={left === null ? undefined : COUNTING}
                   title={
                     left !== null
                       ? countdownTitle(left, queueing ? "Queue" : "Send")

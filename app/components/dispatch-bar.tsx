@@ -4,7 +4,12 @@ import { Paperclip, SendHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
 import { AttachmentChips } from "~/components/attachments";
-import { countdownTitle, SendIcon, StackedLabel } from "~/components/countdown";
+import {
+  COUNTING,
+  countdownTitle,
+  SendIcon,
+  StackedLabel,
+} from "~/components/countdown";
 import { DirectoryPicker } from "~/components/directory-picker";
 import { LoadedConfirm } from "~/components/memory-pressure";
 
@@ -360,7 +365,11 @@ export function DispatchBar({
             disabled={!canDispatch}
             onClick={submit}
             title={left === null ? undefined : countdownTitle(left, "Dispatch")}
-            className="bg-brand-ramp text-brand-foreground shadow-sm hover:opacity-90"
+            className={
+              left === null
+                ? "bg-brand-ramp text-brand-foreground shadow-sm hover:opacity-90"
+                : `${COUNTING} shadow-sm`
+            }
           >
             <SendIcon left={left} icon={<SendHorizontal />} />
             <StackedLabel

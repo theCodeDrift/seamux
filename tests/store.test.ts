@@ -107,6 +107,6 @@ it("keeps the trigger phrase, and drops the key back at the default", () => {
   });
   expect(() => config.setTriggerPhrase("engage", 0)).toThrow();
   expect(() => config.setTriggerPhrase("engage", 2.5)).toThrow();
-  config.setTriggerPhrase("make it so", 7);
+  config.setTriggerPhrase("make it so", 10);
   expect(store.readValue("triggerPhrase")).toBeUndefined();
 });

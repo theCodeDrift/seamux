@@ -28,7 +28,12 @@ import {
 } from "~/components/ui/dialog";
 import { EDGE, EDGE_FRAME, ENGINE_CORNER } from "~/components/card-edge";
 import { ContextBar } from "~/components/context-bar";
-import { countdownTitle, SendIcon, StackedLabel } from "~/components/countdown";
+import {
+  COUNTING,
+  countdownTitle,
+  SendIcon,
+  StackedLabel,
+} from "~/components/countdown";
 import { Markdown } from "~/components/markdown";
 import { useSlashMenu } from "~/components/slash-menu";
 import { SubagentDetail } from "~/components/subagent-list";
@@ -467,6 +472,7 @@ export function ChatModal({
                 <Button
                   disabled={!canSend}
                   onClick={send}
+                  className={left === null ? undefined : COUNTING}
                   title={
                     left !== null
                       ? countdownTitle(left, queueing ? "Queue" : "Send")

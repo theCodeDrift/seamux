@@ -8,6 +8,11 @@ export function countdownTitle(left: number, what: string): string {
   return `${what} in ${left}s. Edit the text to stop it, or click to ${what.toLowerCase()} now`;
 }
 
+// A send button while it counts down: the colour of a waiting chat's dot,
+// so it is plain that it is about to send.
+export const COUNTING =
+  "bg-column-waiting text-warning-foreground hover:bg-column-waiting/90";
+
 // A button's labels in one cell, all but the shown one hidden, so the
 // button keeps its width as they change.
 export function StackedLabel({ labels }: { labels: [string, boolean][] }) {

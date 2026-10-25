@@ -42,13 +42,13 @@ it("treats the phrase as words, not a pattern", () => {
 });
 
 it("reads the stored setting, falling back to the default", () => {
-  expect(readTrigger(null)).toEqual({ phrase: "make it so", seconds: 7 });
+  expect(readTrigger(null)).toEqual({ phrase: "make it so", seconds: 10 });
   expect(readTrigger({ phrase: "", seconds: 3 })).toEqual({
     phrase: "",
     seconds: 3,
   });
   expect(readTrigger({ phrase: "engage", seconds: 0 })).toEqual({
     phrase: "engage",
-    seconds: 7,
+    seconds: 10,
   });
 });

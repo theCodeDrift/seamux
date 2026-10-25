@@ -8,7 +8,10 @@ export interface TriggerPhrase {
   seconds: number;
 }
 
-export const DEFAULT_TRIGGER: TriggerPhrase = { phrase: "make it so", seconds: 7 };
+export const DEFAULT_TRIGGER: TriggerPhrase = {
+  phrase: "make it so",
+  seconds: 10,
+};
 export const MAX_TRIGGER_PHRASE = 100;
 export const MIN_TRIGGER_SECONDS = 1;
 export const MAX_TRIGGER_SECONDS = 60;
