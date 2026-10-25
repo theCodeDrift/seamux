@@ -10,7 +10,7 @@ export interface TriggerPhrase {
 
 export const DEFAULT_TRIGGER: TriggerPhrase = {
   phrase: "make it so",
-  seconds: 10,
+  seconds: 15,
 };
 export const MAX_TRIGGER_PHRASE = 100;
 export const MIN_TRIGGER_SECONDS = 1;
