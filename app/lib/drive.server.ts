@@ -1167,6 +1167,8 @@ interface Worktree {
   repo: string;
   // Where in it the worktrees go: one of WORKTREE_HOMES.
   home: string;
+  // What seamux says of what it branched from: only known as it makes one.
+  base?: string;
 }
 
 interface NewWorktree extends Worktree {
@@ -1207,12 +1209,18 @@ function openingMacros(name: string, cwd: string, wt: Worktree | null) {
   return {
     info: renderMacro(macros.sessionInformation.text, { name, cwd }).trim(),
     howTo: wt
-      ? renderMacro(macros.howToWorktree.text, {
-          worktree: wt.path,
-          branch: wt.branch,
-          repo: wt.repo,
-          worktrees: wt.home,
-        }).trim()
+      ? renderMacro(
+          wt.base
+            ? macros.howToWorktree.text
+            : dropVariable(macros.howToWorktree.text, "base"),
+          {
+            worktree: wt.path,
+            branch: wt.branch,
+            repo: wt.repo,
+            worktrees: wt.home,
+            base: wt.base ?? "",
+          },
+        ).trim()
       : "",
   };
 }
@@ -1234,8 +1242,124 @@ export function worktreeHome(repo: string): string {
   );
 }
 
-// A new worktree for dispatched work, branched from what the chosen checkout
-// has checked out now. seamux makes it rather than `claude --worktree`, which
+// What a new worktree branches from, and the sentence for How to worktree's
+// {{base}} that says so, or "" when there is nothing to say.
+interface Base {
+  ref: string;
+  note: string;
+}
+
+// git asks for nothing and waits for nothing it could hang on.
+const gitQuietly = (args: string[], timeout: number) =>
+  run("git", args, {
+    timeout,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+  });
+
+const failure = (err: unknown) => {
+  const e = err as { killed?: boolean; stderr?: string; message?: string };
+  if (e.killed) return "it timed out";
+  const line = (e.stderr || e.message || "").trim().split("\n").at(-1);
+  return line ? `git said: ${line}` : "git failed";
+};
+
+// The remote's default branch, freshly fetched: the main checkout's own
+// default branch is only as recent as its last pull, and seamux never moves
+// it, since someone's work may be on it. The fetch names its refspec, since
+// a plain `git fetch origin main` leaves origin/main alone in a
+// single-branch clone, which has no origin/HEAD either (knowledge/git.md). A failed fetch is said, never covered for: the
+// worktree then starts from the remote's branch as last fetched, or from
+// what the checkout has checked out when there is none. A repo without a
+// remote starts from what it has checked out, with nothing to say.
+async function freshBase(cwd: string): Promise<Base> {
+  const git = (...args: string[]) =>
+    run("git", ["-C", cwd, ...args]).then(({ stdout }) => stdout.trim());
+  const remotes = (await git("remote")).split("\n").filter(Boolean);
+  const remote = remotes.includes("origin")
+    ? "origin"
+    : remotes.length === 1
+      ? remotes[0]
+      : null;
+  if (!remote) return { ref: "HEAD", note: "" };
+  let branch = await git(
+    "symbolic-ref",
+    "--quiet",
+    "--short",
+    `refs/remotes/${remote}/HEAD`,
+  ).then(
+    (ref) => ref.slice(remote.length + 1),
+    () => null,
+  );
+  let problem: string | null = null;
+  if (!branch) {
+    branch = await gitQuietly(
+      ["-C", cwd, "ls-remote", "--symref", remote, "HEAD"],
+      10_000,
+    ).then(
+      ({ stdout }) =>
+        /^ref: refs\/heads\/(\S+)\tHEAD$/m.exec(stdout)?.[1] ?? null,
+      (err) => ((problem = failure(err)), null),
+    );
+  }
+  if (branch && !problem) {
+    await gitQuietly(
+      [
+        "-C",
+        cwd,
+        "fetch",
+        "--quiet",
+        "--no-tags",
+        remote,
+        `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`,
+      ],
+      30_000,
+    ).catch((err) => (problem = failure(err)));
+  }
+  // A remote with nothing on it has no default branch to start from.
+  if (!branch && !problem) return { ref: "HEAD", note: "" };
+  const tracking = branch ? `${remote}/${branch}` : null;
+  const known =
+    tracking !== null &&
+    (await git("rev-parse", "--verify", "--quiet", `${tracking}^{commit}`).then(
+      () => true,
+      () => false,
+    ));
+  const ref = known ? tracking : "HEAD";
+  const [sha, date] = (await git("log", "-1", "--format=%h %cs", ref)).split(
+    " ",
+  );
+  if (problem) {
+    const what = known
+      ? `${tracking} as last fetched`
+      : `${await git("rev-parse", "--abbrev-ref", "HEAD")}, what the checkout had checked out`;
+    return {
+      ref,
+      note: `seamux couldn't fetch ${remote}'s default branch (${problem}), so this worktree is based on ${what}, at ${sha}, from ${date}. Tell the user before you start, and fetch and rebase onto the remote's default branch once you can.`,
+    };
+  }
+  let note = `seamux fetched ${tracking} just now and branched this worktree from it, at ${sha}, from ${date}.`;
+  // The local branch's own commits, then the remote's it lacks.
+  const [ahead, behind] = await git(
+    "rev-list",
+    "--left-right",
+    "--count",
+    `refs/heads/${branch}...${tracking}`,
+  ).then(
+    (counts) => counts.split(/\s+/).map(Number),
+    () => [0, 0],
+  );
+  const commits = (n: number) => `${n} commit${n === 1 ? "" : "s"}`;
+  if (behind > 0 && ahead === 0) {
+    note += ` The local ${branch} is ${commits(behind)} behind it. seamux leaves that branch alone, since someone's work may be on it: offer the user to fast-forward it.`;
+  } else if (behind > 0) {
+    note += ` The local ${branch} is ${commits(behind)} behind it and has ${commits(ahead)} of its own, which this worktree doesn't have: tell the user.`;
+  }
+  return { ref, note };
+}
+
+// A new worktree, branched from `from`: the remote's latest default branch
+// for dispatched work (freshBase), what the chosen checkout has checked out
+// for a fork. seamux makes it rather than `claude --worktree`, which
 // branches from the remote's default branch (stale when main is unpushed)
 // and stops on exit to ask whether to keep the worktree.
 //
@@ -1247,7 +1371,11 @@ export function worktreeHome(repo: string): string {
 // branch are gone, so a later chat can't take an earlier one's branch, on
 // GitHub or anywhere else. An id whose worktree or branch is somehow there
 // already is drawn again.
-async function createWorktree(cwd: string, name: string): Promise<NewWorktree> {
+async function createWorktree(
+  cwd: string,
+  name: string,
+  from: "default" | "HEAD",
+): Promise<NewWorktree> {
   let list: string;
   try {
     ({ stdout: list } = await run("git", [
@@ -1282,9 +1410,24 @@ async function createWorktree(cwd: string, name: string): Promise<NewWorktree> {
   while (await taken(name + suffix));
   const path = join(home, name + suffix);
   const branch = `worktree-${name}${suffix}`;
-  // HEAD as the chosen checkout sees it, not the main checkout's.
-  await run("git", ["-C", cwd, "worktree", "add", path, "-b", branch, "HEAD"]);
-  return { suffix, path, branch, repo, home: relHome };
+  // HEAD as the chosen checkout sees it, not the main checkout's, and the
+  // remote's default branch fetched from there too.
+  const base =
+    from === "default" ? await freshBase(cwd) : { ref: "HEAD", note: "" };
+  // Without --no-track, a branch made from origin/main pulls from and
+  // pushes to main (knowledge/git.md).
+  await run("git", [
+    "-C",
+    cwd,
+    "worktree",
+    "add",
+    path,
+    "-b",
+    branch,
+    "--no-track",
+    base.ref,
+  ]);
+  return { suffix, path, branch, repo, home: relHome, base: base.note };
 }
 
 // The first prompt of a dispatched session: the new-session macro around
@@ -1336,7 +1479,7 @@ export async function dispatch(input: DispatchInput): Promise<string> {
 
   const engine = input.engine ?? "claude";
   const inUse = await namesInUse();
-  const wt = worktree ? await createWorktree(cwd, worktree) : null;
+  const wt = worktree ? await createWorktree(cwd, worktree, "default") : null;
   const name = asked + (await freeSuffix((s) => inUse.has(asked + s)));
   const where = wt?.path ?? cwd;
   // The session gets the prompt inside the new-session macro; the card
@@ -1399,7 +1542,7 @@ export async function fork(
   const sessionId = randomUUID();
   const inUse = await namesInUse();
   const base = nameFrom(text);
-  const wt = worktree ? await createWorktree(cwd, base) : null;
+  const wt = worktree ? await createWorktree(cwd, base, "HEAD") : null;
   const name = base + (await freeSuffix((s) => inUse.has(base + s)));
   const where = wt?.path ?? cwd;
   recordDispatch({

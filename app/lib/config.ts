@@ -63,6 +63,11 @@ export const MACROS: Record<MacroName, MacroInfo> = {
         meaning:
           "where seamux puts the repo's worktrees, relative to the main checkout: .agents/.worktrees/ or .claude/worktrees/ when the repo has one, otherwise worktrees/",
       },
+      {
+        name: "base",
+        meaning:
+          "what seamux branched it from: the remote's default branch, fetched just now, and how far the local one is behind, or why the fetch failed. Empty after a clear, or for a fork, which branches from what its chat has checked out",
+      },
     ],
     required: null,
   },
@@ -91,12 +96,14 @@ This session runs inside seamux, a board over agent sessions powered by the cmux
 
 You are working in a new git worktree, {{worktree}}, on branch {{branch}}, made from the repo's main checkout, {{repo}}.
 
-If the repo already has a convention for working in worktrees, in its CLAUDE.md, AGENTS.md or other agent instructions, follow that and ignore the rest of this.
+{{base}}
 
-If it doesn't, propose this convention to the user before you start the work. Once they have agreed to it, or to their own version of it, record it in the repo's agent instructions (CLAUDE.md, AGENTS.md, or whichever it has), so later sessions follow it without asking, and follow it in this worktree:
+If the repo already has a convention for working in worktrees, in its CLAUDE.md, AGENTS.md or other agent instructions, follow that and ignore the rest of this, but if it doesn't start a new worktree from the remote's latest default branch, suggest adding that to it.
+
+If it has none, propose this convention to the user before you start the work. Once they have agreed to it, or to their own version of it, record it in the repo's agent instructions (CLAUDE.md, AGENTS.md, or whichever it has), so later sessions follow it without asking, and follow it in this worktree:
 
 1. Worktrees go under {{worktrees}} in the main checkout, never inside other worktrees, and git ignores that directory: \`git -C {{repo}} check-ignore -q {{worktrees}}\` succeeds when it does. If it doesn't, add it to .gitignore.
-2. A new worktree starts from the latest main, unless the work was asked to start from a particular branch or commit: fetch, then rebase onto whichever of the local main branch and the remote's is ahead.
+2. A new worktree starts from the remote's latest default branch, unless the work was asked to start from a particular branch or commit: fetch it, then branch from the remote's branch, not the local one, which is only as recent as its last pull.
 3. Install the project's dependencies in the worktree before running any of its scripts. Package managers hoist dependencies inconsistently, so what is installed in the main checkout may not resolve from a worktree.
 4. Do all the work in the worktree, never in the main checkout.`,
   closeSession: `Clean up after yourself: if you are working in a worktree, remove it and its branch.

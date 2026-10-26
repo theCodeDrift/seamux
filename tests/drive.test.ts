@@ -1116,6 +1116,84 @@ describe("dispatch", () => {
     );
   });
 
+  // A repo cloned from a remote that has since moved on: its own main, and
+  // its origin/main, are a commit behind.
+  function staleClone() {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "seamux-stale-")));
+    const git = (...args: string[]) =>
+      execFileSync("git", args, { stdio: "pipe" }).toString().trim();
+    const commit = (repo: string, message: string) =>
+      git(
+        "-C",
+        repo,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        message,
+      );
+    const remote = join(root, "remote.git");
+    const other = join(root, "other");
+    const repo = join(root, "repo");
+    git("init", "-q", "--bare", "-b", "main", remote);
+    git("clone", "-q", remote, other);
+    commit(other, "one");
+    git("-C", other, "push", "-q", "origin", "HEAD:main");
+    git("clone", "-q", remote, repo);
+    commit(other, "two");
+    git("-C", other, "push", "-q", "origin", "HEAD:main");
+    return {
+      root,
+      remote,
+      repo,
+      git,
+      tip: git("-C", other, "rev-parse", "HEAD"),
+    };
+  }
+
+  it("branches a new worktree from the remote's default branch, fetched just now", async () => {
+    const { root, repo, git, tip } = staleClone();
+    try {
+      const before = git("-C", repo, "rev-parse", "main");
+      await dispatch({ cwd: repo, prompt: "Fix it", worktree: "fix-it" });
+      const { params } = cmux.calls("workspace.create")[0];
+      const path = String(params.cwd);
+      expect(git("-C", path, "rev-parse", "HEAD")).toBe(tip);
+      // Its branch tracks nothing, so it never pulls from or pushes to main.
+      expect(() =>
+        git("-C", path, "rev-parse", "--abbrev-ref", "@{upstream}"),
+      ).toThrow();
+      // The local main is left where it was.
+      expect(git("-C", repo, "rev-parse", "main")).toBe(before);
+      const command = String(params.initial_command);
+      expect(command).toContain("seamux fetched origin/main just now");
+      expect(command).toContain("The local main is 1 commit behind it");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("says so when it can't fetch, and branches from the remote's branch as last fetched", async () => {
+    const { root, remote, repo, git } = staleClone();
+    try {
+      const fetched = git("-C", repo, "rev-parse", "origin/main");
+      rmSync(remote, { recursive: true, force: true });
+      await dispatch({ cwd: repo, prompt: "Fix it", worktree: "fix-it" });
+      const { params } = cmux.calls("workspace.create")[0];
+      expect(git("-C", String(params.cwd), "rev-parse", "HEAD")).toBe(fetched);
+      const command = String(params.initial_command);
+      expect(command).toContain("seamux couldn");
+      expect(command).toContain("as last fetched");
+      expect(command).not.toContain("just now");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("takes the next free name when a workspace already has it", async () => {
     cmux.addWorkspace({ title: "fix-the-login-page" });
     await dispatch({ cwd: dir(), prompt: "Fix the login page" });
