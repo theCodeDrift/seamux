@@ -1,16 +1,24 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Root } from "mdast";
 import { describe, expect, it } from "vitest";
 
 import { remarkFilePaths } from "~/lib/files";
+import { existingPaths, findExistingPaths } from "~/lib/files.server";
 
 // The links remarkFilePaths makes of one line of prose, or of one inline code
-// span, as their urls.
-function links(value: string, type: "text" | "inlineCode" = "text") {
+// span, as their urls, given the paths with spaces the server found.
+function links(
+  value: string,
+  paths: string[] = [],
+  type: "text" | "inlineCode" = "text",
+) {
   const tree: Root = {
     type: "root",
     children: [{ type: "paragraph", children: [{ type, value }] }],
   };
-  remarkFilePaths()(tree);
+  remarkFilePaths({ paths })(tree);
   const paragraph = tree.children[0];
   if (paragraph.type !== "paragraph") throw new Error("no paragraph");
   return paragraph.children.flatMap((c) => (c.type === "link" ? [c.url] : []));
@@ -24,37 +32,52 @@ describe("bare paths", () => {
     ]);
   });
 
-  it("carries a path across spaces to its file's extension", () => {
+  it("carries a path across spaces only to a file the server found", () => {
+    const receipt =
+      "~/Dropbox/__inbox/2026-10-27 Tiltify BCRF donation 1 (7.27pm).pdf";
+    const line = `${receipt} (donation ID 5986)`;
+    expect(links(line, [receipt])).toEqual([receipt]);
+    expect(links(line)).toEqual(["~/Dropbox/__inbox/2026-10-27"]);
+    expect(links("I edited ~/notes and README.md")).toEqual(["~/notes"]);
+  });
+
+  it("takes the longest path the server found", () => {
     expect(
-      links(
-        "~/Dropbox/__inbox/2026-10-27 Tiltify BCRF donation 1 (7.27pm).pdf (donation ID 5986)",
-      ),
-    ).toEqual([
-      "~/Dropbox/__inbox/2026-10-27 Tiltify BCRF donation 1 (7.27pm).pdf",
-    ]);
-    expect(links("Saved to /tmp/my report.html.")).toEqual([
-      "/tmp/my report.html",
-    ]);
+      links("open /tmp/a b.tar c.gz now", [
+        "/tmp/a b.tar",
+        "/tmp/a b.tar c.gz",
+      ]),
+    ).toEqual(["/tmp/a b.tar c.gz"]);
   });
 
-  it("stops at another path, a sentence's end, or a file already named", () => {
-    expect(links("moved /tmp/a to /tmp/b.txt")).toEqual([
-      "/tmp/a",
-      "/tmp/b.txt",
-    ]);
-    expect(links("in /tmp/a. Then notes.md")).toEqual(["/tmp/a"]);
-    expect(links("wrote /tmp/a.txt and b.md")).toEqual(["/tmp/a.txt"]);
-    expect(links("under ~/code/ see x.md")).toEqual(["~/code/"]);
+  it("links inline code that is a path with spaces the server found", () => {
+    const code = "~/Library/Application Support/a b.json";
+    expect(links(code, [code], "inlineCode")).toEqual([code]);
+    expect(links(code, [], "inlineCode")).toEqual([]);
+  });
+});
+
+describe("existing paths", () => {
+  const dir = mkdtempSync(join(tmpdir(), "seamux-paths-"));
+  mkdirSync(join(dir, "in box"));
+  writeFileSync(join(dir, "in box", "receipt 1 (7.27pm).pdf"), "");
+  writeFileSync(join(dir, "my notes.md"), "");
+
+  it("finds the paths with spaces that are files, as the reply wrote them", async () => {
+    const reply = [
+      `- **${dir}/in box/receipt 1 (7.27pm).pdf** (donation)`,
+      `- ${dir}/in box/receipt 2 (7.34pm).pdf (missing)`,
+      "- see `./my notes.md`, and ./my notes.md.",
+    ].join("\n");
+    expect((await findExistingPaths(reply, dir)).sort()).toEqual(
+      [`${dir}/in box/receipt 1 (7.27pm).pdf`, "./my notes.md"].sort(),
+    );
   });
 
-  it("leaves brackets that don't close as prose", () => {
-    expect(links("in /tmp/a (see notes.md)")).toEqual(["/tmp/a"]);
-  });
-
-  it("links inline code that is a path with spaces", () => {
-    expect(
-      links("~/Library/Application Support/a b.json", "inlineCode"),
-    ).toEqual(["~/Library/Application Support/a b.json"]);
-    expect(links("npm run test file.ts", "inlineCode")).toEqual([]);
+  it("looks for what a reply names once", async () => {
+    const reply = `${dir}/my notes.md`;
+    const first = existingPaths(reply, dir);
+    expect(existingPaths(reply, dir)).toBe(first);
+    expect(await first).toEqual([reply]);
   });
 });

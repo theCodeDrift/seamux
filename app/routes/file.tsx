@@ -24,7 +24,7 @@ import {
   SANDBOX_FLAGS,
   type FileView,
 } from "~/lib/files";
-import { loadFile, SANDBOX_BASE } from "~/lib/files.server";
+import { findExistingPaths, loadFile, SANDBOX_BASE } from "~/lib/files.server";
 import { assertLocalRead } from "~/lib/guard.server";
 import { useLocalStorage } from "~/lib/use-session-storage";
 import { cn } from "~/lib/utils";
@@ -41,7 +41,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!path) throw data("No path", { status: 400 });
   const file = await loadFile(path);
   if (!file) throw data(`Not found: ${path}`, { status: 404 });
-  return { file, sandboxBase: SANDBOX_BASE };
+  const paths =
+    file.type === "file" && file.kind === "markdown" && file.text
+      ? await findExistingPaths(file.text, dirnameOf(file.path))
+      : [];
+  return { file, paths, sandboxBase: SANDBOX_BASE };
 }
 
 // Switching between raw and rendered changes only `view`; the loader
@@ -88,7 +92,7 @@ function formatSize(bytes: number): string {
 }
 
 export default function FileViewer({ loaderData }: Route.ComponentProps) {
-  const { file, sandboxBase } = loaderData;
+  const { file, paths, sandboxBase } = loaderData;
   useWatch(file.path, file.mtime);
   const [params, setParams] = useSearchParams();
   const renderable =
@@ -219,7 +223,9 @@ export default function FileViewer({ loaderData }: Route.ComponentProps) {
               "prose-pre:bg-muted prose-pre:text-foreground prose-code:before:content-none prose-code:after:content-none",
             )}
           >
-            <Markdown base={dirnameOf(file.path)}>{file.text ?? ""}</Markdown>
+            <Markdown base={dirnameOf(file.path)} paths={paths}>
+              {file.text ?? ""}
+            </Markdown>
           </article>
         ) : view === "rendered" && file.kind === "html" ? (
           // Scripts run, but in an opaque origin: see SANDBOX_FLAGS.

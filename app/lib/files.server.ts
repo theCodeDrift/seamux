@@ -8,7 +8,12 @@ import { homedir } from "node:os";
 import { extname, join } from "node:path";
 import { Readable } from "node:stream";
 
-import { SANDBOX_FLAGS } from "./files.ts";
+import remarkFrontmatter from "remark-frontmatter";
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import { unified } from "unified";
+
+import { linkedPath, SANDBOX_FLAGS, spacedCandidates } from "./files.ts";
 
 // A rendered HTML page runs sandboxed, in an opaque origin, so its own
 // stylesheets and scripts arrive as cross-site requests with no Referer:
@@ -124,6 +129,43 @@ export async function resolveFile(
   const worktree = path.slice(0, path.length - rest.length);
   if (await statOrNull(worktree)) return null;
   return resolveLine(checkout + rest);
+}
+
+// The paths with spaces in markdown that are files on disk, written as the
+// markdown wrote them, for the renderer to link (remarkFilePaths in
+// files.ts). `base` is what a relative one is relative to.
+const parser = unified().use(remarkParse).use(remarkGfm).use(remarkFrontmatter);
+
+export async function findExistingPaths(
+  text: string,
+  base: string,
+): Promise<string[]> {
+  const found = await Promise.all(
+    spacedCandidates(parser.parse(text)).map(async (candidate) => {
+      const path = linkedPath(candidate, base);
+      return path && (await resolveFile(path)) ? [candidate] : [];
+    }),
+  );
+  return found.flat();
+}
+
+// The same for a reply, which never changes, so what it names is looked for
+// once, while it's among the replies the board last showed.
+const existing = new Map<string, Promise<string[]>>();
+const EXISTING_MAX = 512;
+
+export function existingPaths(text: string, base: string): Promise<string[]> {
+  const key = `${base}\0${text}`;
+  let found = existing.get(key);
+  if (found) {
+    existing.delete(key);
+  } else {
+    found = findExistingPaths(text, base);
+    if (existing.size >= EXISTING_MAX)
+      existing.delete(existing.keys().next().value!);
+  }
+  existing.set(key, found);
+  return found;
 }
 
 export function contentType(path: string, sample: Buffer): string {

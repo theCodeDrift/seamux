@@ -2,7 +2,7 @@
 // `./app/root.tsx` or `/Users/…/README.md`; the board would resolve that
 // against its own URL, so it becomes a link to the /file viewer instead.
 
-import type { Link, Nodes, PhrasingContent, Root, Text } from "mdast";
+import type { InlineCode, Nodes, PhrasingContent, Root, Text } from "mdast";
 
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 // `style.css:12` has the shape of a scheme, but is a path and a line.
@@ -118,16 +118,18 @@ function spacedPath(value: string): boolean {
   return depth === 0;
 }
 
-// Written bare, a path with spaces ends where its file's extension does, so
-// the words after `path` join it up to the nearest extension on the line.
-// They never cross another `/` or the end of a sentence, and `path` itself
-// must not already be a file or a directory written as one.
+// Written bare, a path with spaces could end at any extension in the words
+// after `path`: each one it could be, nearest first, never past the end of a
+// sentence, and only when `path` itself isn't already a file or a directory
+// written as one. Which of them is a file only the server can say
+// (`existingPaths` in files.server.ts), so a guess never links.
 const MAX_WORDS = 8;
-function spacedTail(path: string, rest: string): string {
+function spacedTails(path: string, rest: string): string[] {
   if (!ANCHORED.test(path) || EXTENSION.test(path) || path.endsWith("/")) {
-    return path;
+    return [];
   }
-  const words = /^ ([^\s/`<>"]+)/;
+  const words = /^ ([^\s`<>"]+)/;
+  const tails: string[] = [];
   let candidate = path;
   let tail = rest;
   for (let i = 0; i < MAX_WORDS; i++) {
@@ -136,13 +138,16 @@ function spacedTail(path: string, rest: string): string {
     candidate += ` ${m[1]}`;
     tail = tail.slice(m[0].length);
     const trimmed = candidate.replace(TRAILING, "");
-    if (spacedPath(trimmed)) return trimmed;
+    if (spacedPath(trimmed)) tails.push(trimmed);
     if (trimmed !== candidate) break;
   }
-  return path;
+  return tails;
 }
 
-function linkText(text: Text): PhrasingContent[] | null {
+function linkText(
+  text: Text,
+  exists: ReadonlySet<string>,
+): PhrasingContent[] | null {
   const out: PhrasingContent[] = [];
   let last = 0;
   for (const m of text.value.matchAll(TOKEN)) {
@@ -151,7 +156,8 @@ function linkText(text: Text): PhrasingContent[] | null {
     let path = barePath(m[2]);
     if (!path) continue;
     if (path === m[2]) {
-      path = spacedTail(path, text.value.slice(start + path.length));
+      const tails = spacedTails(path, text.value.slice(start + path.length));
+      for (const tail of tails) if (exists.has(tail)) path = tail;
     }
     if (start > last)
       out.push({ type: "text", value: text.value.slice(last, start) });
@@ -168,32 +174,55 @@ function linkText(text: Text): PhrasingContent[] | null {
   return out;
 }
 
+// The text and inline code a reply shows as prose, outside any link.
+function visitProse(
+  node: Nodes,
+  visit: (child: Text | InlineCode) => PhrasingContent[] | null,
+) {
+  if (!("children" in node)) return;
+  if (node.type === "link" || node.type === "linkReference") return;
+  const children: Nodes[] = [];
+  for (const child of node.children) {
+    if (child.type === "text" || child.type === "inlineCode") {
+      children.push(...(visit(child) ?? [child]));
+    } else {
+      visitProse(child, visit);
+      children.push(child);
+    }
+  }
+  (node as { children: Nodes[] }).children = children;
+}
+
 // Links every bare path in a reply, which the renderer then points at the
-// /file viewer like any other link to a file.
-export function remarkFilePaths() {
-  const walk = (node: Nodes) => {
-    if (!("children" in node)) return;
-    if (node.type === "link" || node.type === "linkReference") return;
-    const children: Nodes[] = [];
-    for (const child of node.children) {
-      if (child.type === "text") {
-        children.push(...(linkText(child) ?? [child]));
-      } else if (
-        child.type === "inlineCode" &&
-        (barePath(child.value) === child.value || spacedPath(child.value))
-      ) {
-        const link: Link = {
-          type: "link",
-          url: child.value,
-          children: [child],
-        };
-        children.push(link);
-      } else {
-        walk(child);
-        children.push(child);
+// /file viewer like any other link to a file. A path with spaces links only
+// when it is one of `paths`, those the server found on disk.
+export function remarkFilePaths({ paths = [] }: { paths?: string[] } = {}) {
+  const exists = new Set(paths);
+  return (tree: Root) =>
+    visitProse(tree, (child) => {
+      if (child.type === "text") return linkText(child, exists);
+      const { value } = child;
+      if (barePath(value) !== value && !exists.has(value)) return null;
+      return [{ type: "link", url: value, children: [child] }];
+    });
+}
+
+// Every path with spaces a reply might mean, for the server to look for.
+export function spacedCandidates(tree: Root): string[] {
+  const found = new Set<string>();
+  visitProse(tree, (child) => {
+    if (child.type === "inlineCode") {
+      if (spacedPath(child.value)) found.add(child.value);
+      return null;
+    }
+    for (const m of child.value.matchAll(TOKEN)) {
+      const start = m.index + m[1].length;
+      const rest = child.value.slice(start + m[2].length);
+      if (barePath(m[2]) === m[2]) {
+        for (const tail of spacedTails(m[2], rest)) found.add(tail);
       }
     }
-    (node as { children: Nodes[] }).children = children;
-  };
-  return (tree: Root) => walk(tree);
+    return null;
+  });
+  return [...found];
 }

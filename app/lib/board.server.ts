@@ -51,6 +51,7 @@ import {
   type CursorTranscript,
 } from "./cursor.server";
 import { listingPids } from "./commands.server";
+import { existingPaths } from "./files.server";
 import { ENGINES, type Engine } from "./config";
 import { configOrDefaults } from "./config.server";
 import {
@@ -601,8 +602,20 @@ export async function loadMessages(
 ): Promise<{ messages: ChatMessage[]; total: number } | null> {
   const transcript = await findTranscript(sessionId);
   if (!transcript) return null;
-  const all = await READERS[transcript.engine].messages(transcript.path);
-  return { messages: all.slice(-limit), total: all.length };
+  const reader = READERS[transcript.engine];
+  const [all, info] = await Promise.all([
+    reader.messages(transcript.path),
+    reader.info(sessionId, transcript.path),
+  ]);
+  // A reply's paths with spaces link only once found on disk.
+  const messages = await Promise.all(
+    all.slice(-limit).map(async (m) => {
+      if (m.role !== "assistant" || !info) return m;
+      const paths = await existingPaths(m.text, info.cwd);
+      return paths.length > 0 ? { ...m, paths } : m;
+    }),
+  );
+  return { messages, total: all.length };
 }
 
 interface ClaudeConversation {
@@ -1214,6 +1227,14 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
     card.clearedFrom =
       pinRows.find((p) => p.sessionId === card.sessionId)?.clearedFrom ?? null;
   }
+  await Promise.all(
+    cards.map(async (card) => {
+      const paths = card.lastReply
+        ? await existingPaths(card.lastReply, card.cwd)
+        : [];
+      if (paths.length > 0) card.lastReplyPaths = paths;
+    }),
+  );
   try {
     for (const row of queuedFor(cards.map((c) => c.sessionId))) {
       cards

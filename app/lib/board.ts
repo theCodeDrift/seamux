@@ -116,6 +116,8 @@ export interface Card {
   // When the user sent the last prompt, which orders each column.
   lastPromptAt: number | null;
   lastReply: string | null;
+  // The paths with spaces lastReply names that are files on disk.
+  lastReplyPaths?: string[];
   // null until the chat's first response, and again just after a compaction.
   context: ContextUsage | null;
   // Prompts typed into the terminal that wait in Claude Code's own queue.
@@ -298,7 +300,14 @@ export type CmuxTrouble =
   "not_installed" | "not_running" | "socket_off" | "outside_cmux" | "password";
 
 export type ChatMessage =
-  | { role: "user" | "assistant"; text: string; at: string | null }
+  // paths: in a reply, the paths with spaces it names that are files on disk,
+  // which only these link.
+  | {
+      role: "user" | "assistant";
+      text: string;
+      at: string | null;
+      paths?: string[];
+    }
   // A system macro seamux sent, shown by its name rather than its text.
   | { role: "macro"; name: MacroName; at: string | null }
   // The tools a reply called between its words, each by name with how many

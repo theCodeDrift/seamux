@@ -688,7 +688,7 @@ const Conversation = memo(function Conversation({
             className="sensitive prose prose-sm max-md:prose-base max-w-[85%] self-start rounded-lg bg-muted px-3 py-2 text-sm max-md:text-base dark:prose-invert prose-pre:overflow-x-auto prose-pre:bg-background prose-pre:text-foreground prose-code:before:content-none prose-code:after:content-none"
           >
             {m.map((reply, j) => (
-              <Markdown key={j} base={cwd}>
+              <Markdown key={j} base={cwd} paths={reply.paths}>
                 {reply.text}
               </Markdown>
             ))}
