@@ -102,19 +102,69 @@ function barePath(token: string): string | null {
   return BARE_PATH.test(path) ? path : null;
 }
 
+// A path with spaces in it, such as `~/Dropbox/2026-10-27 Receipt (1).pdf`:
+// absolute, from home or relative to `.`, ending in a file's extension, with
+// its brackets closed.
+const ANCHORED = /^(?:\/|~\/|\.{1,2}\/)/;
+const EXTENSION = /\/[^/]*\.[A-Za-z]\w*$/;
+function spacedPath(value: string): boolean {
+  if (!ANCHORED.test(value) || !EXTENSION.test(value)) return false;
+  if (!BARE_PATH.test(value.replace(/[ ()]/g, "_"))) return false;
+  let depth = 0;
+  for (const c of value) {
+    depth += c === "(" ? 1 : c === ")" ? -1 : 0;
+    if (depth < 0) return false;
+  }
+  return depth === 0;
+}
+
+// Written bare, a path with spaces ends where its file's extension does, so
+// the words after `path` join it up to the nearest extension on the line.
+// They never cross another `/` or the end of a sentence, and `path` itself
+// must not already be a file or a directory written as one.
+const MAX_WORDS = 8;
+function spacedTail(path: string, rest: string): string {
+  if (!ANCHORED.test(path) || EXTENSION.test(path) || path.endsWith("/")) {
+    return path;
+  }
+  const words = /^ ([^\s/`<>"]+)/;
+  let candidate = path;
+  let tail = rest;
+  for (let i = 0; i < MAX_WORDS; i++) {
+    const m = words.exec(tail);
+    if (!m) break;
+    candidate += ` ${m[1]}`;
+    tail = tail.slice(m[0].length);
+    const trimmed = candidate.replace(TRAILING, "");
+    if (spacedPath(trimmed)) return trimmed;
+    if (trimmed !== candidate) break;
+  }
+  return path;
+}
+
 function linkText(text: Text): PhrasingContent[] | null {
   const out: PhrasingContent[] = [];
   let last = 0;
   for (const m of text.value.matchAll(TOKEN)) {
-    const path = barePath(m[2]);
-    if (!path) continue;
     const start = m.index + m[1].length;
-    if (start > last) out.push({ type: "text", value: text.value.slice(last, start) });
-    out.push({ type: "link", url: path, children: [{ type: "text", value: path }] });
+    if (start < last) continue;
+    let path = barePath(m[2]);
+    if (!path) continue;
+    if (path === m[2]) {
+      path = spacedTail(path, text.value.slice(start + path.length));
+    }
+    if (start > last)
+      out.push({ type: "text", value: text.value.slice(last, start) });
+    out.push({
+      type: "link",
+      url: path,
+      children: [{ type: "text", value: path }],
+    });
     last = start + path.length;
   }
   if (last === 0) return null;
-  if (last < text.value.length) out.push({ type: "text", value: text.value.slice(last) });
+  if (last < text.value.length)
+    out.push({ type: "text", value: text.value.slice(last) });
   return out;
 }
 
@@ -128,8 +178,15 @@ export function remarkFilePaths() {
     for (const child of node.children) {
       if (child.type === "text") {
         children.push(...(linkText(child) ?? [child]));
-      } else if (child.type === "inlineCode" && barePath(child.value) === child.value) {
-        const link: Link = { type: "link", url: child.value, children: [child] };
+      } else if (
+        child.type === "inlineCode" &&
+        (barePath(child.value) === child.value || spacedPath(child.value))
+      ) {
+        const link: Link = {
+          type: "link",
+          url: child.value,
+          children: [child],
+        };
         children.push(link);
       } else {
         walk(child);
