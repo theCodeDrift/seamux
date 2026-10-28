@@ -1,5 +1,13 @@
 # seamux
 
+## 0.5.1
+
+### Patch Changes
+
+- 9794a0a: A new worktree from the dispatch bar starts from the remote's default branch, fetched just before it is made, not from whatever the checkout last pulled, so it is no longer days or hundreds of commits behind. seamux leaves your local default branch where it is: the How to worktree macro tells the session what it was branched from and how far behind the local branch is, and the session offers to fast-forward it. When the fetch fails, the session is told so, with the commit and date it started from instead. The macro has a new `{{base}}` variable for this, and also has the session suggest adding a fresh start to the repo's own worktree convention when that convention lacks one. A How to worktree macro you have customised keeps your text, so add `{{base}}` to it to get the new line. Forks into a new worktree still branch from what their chat has checked out.
+- 2b17648: A file path with spaces in a reply, such as `~/Dropbox/2026-10-27 Receipt (1).pdf`, links as one path to the file viewer, written bare or as inline code, rather than stopping at its first space. The board looks for it on disk first, so words after a path that only look like the rest of it stay prose.
+- 6c3bd9d: A trigger phrase sends for you: a prompt in the dispatch bar, or a reply in a card or a chat's full view, that you type to end in "make it so" goes on its own after 15 seconds, with the send button turning the colour of a waiting chat and counting down meanwhile, so a dictated message can be sent by saying so. The phrase isn't sent, any edit starts the count over, and taking the phrase off stops it. Change the phrase or the wait, or turn it off, under Trigger phrase in the General tab.
+
 ## 0.5.0
 
 ### Minor Changes
