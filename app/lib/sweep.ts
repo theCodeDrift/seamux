@@ -5,8 +5,6 @@
 export const SWEEP_AFTER_POLLS = 100;
 
 // Browser storage kept per chat, each key ending in its session id.
-export const minimizedKey = (sessionId: string) =>
-  `seamux:minimized:${sessionId}`;
 export const chatOpenKey = (sessionId: string) =>
   `seamux:chat-open:${sessionId}`;
 export const scrollKey = (sessionId: string) =>
@@ -14,12 +12,7 @@ export const scrollKey = (sessionId: string) =>
 export const queueEditsKey = (sessionId: string) =>
   `seamux:queue-edits:${sessionId}`;
 
-const PER_SESSION = [
-  { area: "local", prefix: minimizedKey("") },
-  { area: "session", prefix: chatOpenKey("") },
-  { area: "session", prefix: scrollKey("") },
-  { area: "session", prefix: queueEditsKey("") },
-] as const;
+const PER_SESSION = [chatOpenKey(""), scrollKey(""), queueEditsKey("")];
 
 // One poll's tally. `missing` holds, for each id, how many healthy polls in
 // a row it has been missing; a poll that can't see every chat starts every
@@ -47,11 +40,10 @@ export function tallyMissing(
 // The session ids browser storage holds anything for.
 export function storedSessionIds(): string[] {
   const ids: string[] = [];
-  for (const { area, prefix } of PER_SESSION) {
+  for (const prefix of PER_SESSION) {
     try {
-      const store = area === "local" ? localStorage : sessionStorage;
-      for (let i = 0; i < store.length; i++) {
-        const key = store.key(i);
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
         if (key?.startsWith(prefix)) ids.push(key.slice(prefix.length));
       }
     } catch {}
@@ -60,10 +52,9 @@ export function storedSessionIds(): string[] {
 }
 
 export function forgetStored(sessionId: string) {
-  for (const { area, prefix } of PER_SESSION) {
+  for (const prefix of PER_SESSION) {
     try {
-      const store = area === "local" ? localStorage : sessionStorage;
-      store.removeItem(prefix + sessionId);
+      sessionStorage.removeItem(prefix + sessionId);
     } catch {}
   }
 }

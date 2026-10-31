@@ -438,6 +438,39 @@ export function movePin(sessionId: string, before: string | null): void {
   });
 }
 
+// Chats the user folded to their title on the board, so every browser shows
+// them folded. Kept in the config, since nothing else records it; the board
+// forgets a chat's once it has been gone long enough (`forgetMinimized`).
+const MINIMIZED_KEY = "minimized";
+
+function readMinimized(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((id): id is string => typeof id === "string");
+}
+
+export function minimizedSessions(): string[] {
+  return readMinimized(readValue(MINIMIZED_KEY));
+}
+
+export function setMinimized(sessionIds: string[], minimized: boolean): void {
+  updateValue(MINIMIZED_KEY, readMinimized, (all) => {
+    const next = minimized
+      ? [...all, ...sessionIds.filter((id) => !all.includes(id))]
+      : all.filter((id) => !sessionIds.includes(id));
+    return next.length === all.length ? all : next;
+  });
+}
+
+// Folds the chat `/clear` carried a minimized chat on under, as it carries
+// the pin.
+export function carryMinimized(from: string, to: string): void {
+  updateValue(MINIMIZED_KEY, readMinimized, (all) => {
+    if (!all.includes(from)) return all;
+    const rest = all.filter((id) => id !== from);
+    return rest.includes(to) ? rest : [...rest, to];
+  });
+}
+
 export interface QueuedRow {
   id: number;
   session_id: string;

@@ -17,6 +17,8 @@ type Intent =
   | "pin"
   | "unpin"
   | "pin-move"
+  | "minimize"
+  | "restore"
   | "rename"
   | "answer"
   | "approve"
@@ -101,6 +103,8 @@ export function useSessionAction(
       });
     },
     pending: fetcher.state !== "idle",
+    // The verb in flight, until the board it changed has been loaded again.
+    pendingIntent: (fetcher.formData?.get("intent") ?? null) as Intent | null,
     error: fetcher.state === "idle" ? (fetcher.data?.error ?? null) : null,
   };
 }

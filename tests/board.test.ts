@@ -25,6 +25,7 @@ import {
 } from "~/lib/board.server";
 import { DEFAULT_CONFIG, renderMacro } from "~/lib/config";
 import { clearFailure, recordFailure } from "~/lib/send-failures.server";
+import { minimizedSessions, setMinimized } from "~/lib/store.server";
 import { FakeCmux } from "./fake-cmux";
 
 let cmux: FakeCmux;
@@ -49,6 +50,15 @@ it("loads before Claude Code has ever run", async () => {
   expect(board.cards).toEqual([]);
   expect(board.warnings).toEqual([]);
   expect(board.sessionsKnown).toBe(true);
+});
+
+it("forgets a chat's fold once the board has seen every chat without it for 10 minutes", async () => {
+  setMinimized(["gone"], true);
+  await loadBoard(1_000);
+  await loadBoard(1_000 + 9 * 60_000);
+  expect(minimizedSessions()).toEqual(["gone"]);
+  await loadBoard(1_000 + 10 * 60_000);
+  expect(minimizedSessions()).toEqual([]);
 });
 
 it("loads with only Codex installed, and no claude to run", async () => {

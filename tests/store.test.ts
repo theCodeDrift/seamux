@@ -83,6 +83,20 @@ it("pins, moves, carries and unpins", () => {
   expect(store.pinnedSessions()).toEqual(["b"]);
 });
 
+it("folds, carries and opens chats", () => {
+  store.setMinimized(["a", "b"], true);
+  store.setMinimized(["a"], true);
+  expect(store.minimizedSessions()).toEqual(["a", "b"]);
+  store.carryMinimized("a", "c");
+  store.carryMinimized("x", "d");
+  expect(store.minimizedSessions()).toEqual(["b", "c"]);
+  // Carried onto a chat already folded, the old one just goes.
+  store.carryMinimized("b", "c");
+  expect(store.minimizedSessions()).toEqual(["c"]);
+  store.setMinimized(["c"], false);
+  expect(store.minimizedSessions()).toEqual([]);
+});
+
 it("keeps project colours, and takes a browser's only where none is set", () => {
   config.setProjectColor("/r/one", 3);
   config.importProjectColors({

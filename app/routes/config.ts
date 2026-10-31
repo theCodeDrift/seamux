@@ -14,9 +14,14 @@ import {
 } from "~/lib/config.server";
 import { forgetCommands } from "~/lib/commands.server";
 import { checkDirectory } from "~/lib/drive.server";
-import { assertFromBoard, isLocalRequest } from "~/lib/guard.server";
+import {
+  assertFromBoard,
+  isLocalRequest,
+  SESSION_ID,
+} from "~/lib/guard.server";
 import { readCredentials } from "~/lib/credentials";
 import { SEAMUX_HOME } from "~/lib/paths.server";
+import { setMinimized } from "~/lib/store.server";
 import {
   readRemoteSettings,
   setRemoteSwitch,
@@ -50,6 +55,7 @@ const INTENTS = new Set([
   "clear-themes",
   "project-color",
   "import-project-colors",
+  "import-minimized",
 ]);
 
 export interface ConfigResult {
@@ -80,6 +86,12 @@ async function perform(intent: string, form: FormData, request: Request) {
     setProjectColor(field("project"), slot ? Number(slot) : null);
   } else if (intent === "import-project-colors") {
     importProjectColors(JSON.parse(field("colors") || "{}"));
+  } else if (intent === "import-minimized") {
+    const ids: unknown = JSON.parse(field("sessions") || "[]");
+    if (!Array.isArray(ids) || !ids.every((id) => SESSION_ID.test(id))) {
+      throw new Error("Bad session ids");
+    }
+    setMinimized(ids, true);
   } else if (intent === "clear-commands") {
     forgetCommands();
   } else if (intent === "save-theme") {
@@ -100,7 +112,9 @@ async function perform(intent: string, form: FormData, request: Request) {
     // Like remote access: on only from this Mac, off from anywhere.
     const on = field("on") === "true";
     if (on && !isLocalRequest(request)) {
-      throw new Error("Setting the theme from a script can only be turned on from this Mac");
+      throw new Error(
+        "Setting the theme from a script can only be turned on from this Mac",
+      );
     }
     setThemeSwap(on);
   }

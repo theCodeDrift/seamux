@@ -89,11 +89,14 @@ import {
 } from "./transcript.server";
 import {
   dispatchesFor,
+  carryMinimized,
   carryPin,
+  minimizedSessions,
   notePinProcess,
   pins,
   queuedFor,
   recentDispatchCwds,
+  setMinimized,
   setPinned,
   subagentsFor,
   type PinRow,
@@ -892,12 +895,42 @@ function settlePins(
         pin.pid != null && pin.startedAt != null
           ? inProcess.get(processKey(pin.pid, pin.startedAt))
           : undefined;
-      if (next) carryPin(pin.sessionId, next);
-      else setPinned(pin.sessionId, false);
+      if (next) {
+        carryPin(pin.sessionId, next);
+        carryMinimized(pin.sessionId, next);
+      } else setPinned(pin.sessionId, false);
       changed = true;
     }
   }
   return changed ? pins() : rows;
+}
+
+// A minimized chat's fold goes once the board, seeing every chat, has not
+// shown it for this long: its card left the board, so there is nothing to
+// fold, and a chat resumed later opens whole. Counted in this process, so a
+// restart counts again.
+const FORGET_MINIMIZED_MS = 10 * 60 * 1000;
+const minimizedMissingSince = new Map<string, number>();
+
+function forgetMinimized(minimized: Set<string>, cards: Card[], now: number) {
+  const present = new Set(
+    cards.flatMap((c) =>
+      c.clearedFrom ? [c.sessionId, c.clearedFrom] : [c.sessionId],
+    ),
+  );
+  const gone: string[] = [];
+  for (const id of [...minimizedMissingSince.keys()]) {
+    if (!minimized.has(id) || present.has(id)) minimizedMissingSince.delete(id);
+  }
+  for (const id of minimized) {
+    if (present.has(id)) continue;
+    const since = minimizedMissingSince.get(id) ?? now;
+    minimizedMissingSince.set(id, since);
+    if (now - since >= FORGET_MINIMIZED_MS) gone.push(id);
+  }
+  if (gone.length === 0) return;
+  setMinimized(gone, false);
+  for (const id of gone) minimizedMissingSince.delete(id);
 }
 
 export async function loadBoard(now = Date.now()): Promise<Board> {
@@ -1076,6 +1109,7 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
         drivable: surfaces.has(row.sessionId),
         turnRunning: busy,
         pinned: false,
+        minimized: false,
         clearedFrom: null,
         waiting,
         apiError: summary?.apiError ?? null,
@@ -1184,6 +1218,7 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
         drivable: false,
         turnRunning: false,
         pinned: false,
+        minimized: false,
         clearedFrom: null,
         waiting: null,
         apiError: null,
@@ -1226,6 +1261,15 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
     card.pinned = pinned.has(card.sessionId);
     card.clearedFrom =
       pinRows.find((p) => p.sessionId === card.sessionId)?.clearedFrom ?? null;
+  }
+  try {
+    const minimized = new Set(minimizedSessions());
+    for (const card of cards) card.minimized = minimized.has(card.sessionId);
+    if (agentsKnown && liveKnown && trouble === null) {
+      forgetMinimized(minimized, cards, now);
+    }
+  } catch (err) {
+    warnings.push(`Minimized store unavailable: ${(err as Error).message}`);
   }
   await Promise.all(
     cards.map(async (card) => {
@@ -1342,6 +1386,7 @@ function codexFields(
     fanouts: [],
     drivable: false,
     pinned: false,
+    minimized: false,
     clearedFrom: null,
     // Codex records no API errors the board reads.
     apiError: null,
@@ -1450,6 +1495,7 @@ function cursorFields(
     fanouts: [],
     drivable: false,
     pinned: false,
+    minimized: false,
     clearedFrom: null,
     apiError: null,
     closing: null,

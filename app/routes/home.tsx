@@ -144,7 +144,6 @@ import {
 import {
   chatOpenKey,
   forgetStored,
-  minimizedKey,
   storedSessionIds,
   tallyMissing,
 } from "~/lib/sweep";
@@ -1204,16 +1203,59 @@ function MoreActions({
   );
 }
 
+// Whether a card is folded to its title, which the board keeps for every
+// browser, shown as soon as it is toggled, ahead of the poll.
+function useMinimized(card: BoardCard) {
+  const { submit, pendingIntent, error } = useSessionAction(card.sessionId);
+  const value =
+    pendingIntent === "minimize"
+      ? true
+      : pendingIntent === "restore"
+        ? false
+        : card.minimized;
+  const set = (next: boolean) => submit(next ? "minimize" : "restore");
+  return { value, set, error };
+}
+
+// Where this browser kept folded cards before the board kept them.
+const LEGACY_MINIMIZED_PREFIX = "seamux:minimized:";
+
+// Hands the cards this browser folded to the board, once, and forgets them.
+function useImportLegacyMinimized() {
+  const fetcher = useFetcher();
+  useEffect(() => {
+    const ids: string[] = [];
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (!key?.startsWith(LEGACY_MINIMIZED_PREFIX)) continue;
+        if (localStorage.getItem(key) === "true") {
+          ids.push(key.slice(LEGACY_MINIMIZED_PREFIX.length));
+        }
+        localStorage.removeItem(key);
+      }
+    } catch {}
+    if (ids.length === 0) return;
+    fetcher.submit(
+      { intent: "import-minimized", sessions: JSON.stringify(ids) },
+      { method: "post", action: "/config" },
+    );
+    // Once, on mount.
+  }, []);
+}
+
 // Folds a card to its title, for a chat worth keeping in view but not now,
-// or opens it back up. Kept in this browser only, like the board's other
-// view preferences.
+// or opens it back up, in every browser.
 function MinimizeToggle({
   minimized,
   setMinimized,
+  error,
 }: {
   minimized: boolean;
   setMinimized: (minimized: boolean) => void;
+  error: string | null;
 }) {
+  useReportError("minimize", error);
   return (
     <Button
       size="icon-xs"
@@ -1337,10 +1379,7 @@ function SessionCard({ card, now }: { card: BoardCard; now: number }) {
     window.addEventListener(CHAT_CARRIED, onCarried);
     return () => window.removeEventListener(CHAT_CARRIED, onCarried);
   }, [card.sessionId, setChatOpen]);
-  const [minimized, setMinimized] = useLocalStorage(
-    minimizedKey(card.sessionId),
-    false,
-  );
+  const minimized = useMinimized(card);
   const { errors, report } = useCardErrors();
   return (
     <CardErrorsContext.Provider value={report}>
@@ -1369,19 +1408,20 @@ function SessionCard({ card, now }: { card: BoardCard; now: number }) {
                   title={COLUMN_LABELS[card.column]}
                 />
               )}
-              {minimized && <PathSwatch cwd={card.cwd} />}
+              {minimized.value && <PathSwatch cwd={card.cwd} />}
               <SessionName card={card} />
             </span>
             <span className="flex shrink-0 items-center gap-1">
               <PinToggle card={card} />
               <MinimizeToggle
-                minimized={minimized}
-                setMinimized={setMinimized}
+                minimized={minimized.value}
+                setMinimized={minimized.set}
+                error={minimized.error}
               />
               <CardControl card={card} />
             </span>
           </CardTitle>
-          {!minimized && (
+          {!minimized.value && (
             <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs max-md:text-sm">
               <span className="inline-flex min-w-0 items-center gap-1.5">
                 <PathSwatch cwd={card.cwd} />
@@ -1404,7 +1444,7 @@ function SessionCard({ card, now }: { card: BoardCard; now: number }) {
             </CardDescription>
           )}
         </CardHeader>
-        {minimized ? (
+        {minimized.value ? (
           errors.length > 0 && (
             <CardContent className="flex flex-col gap-2 text-xs max-md:text-sm">
               {errors.map((e) => (
@@ -2257,6 +2297,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     });
   }, [board, setDrafts]);
   useImportLegacyColors();
+  useImportLegacyMinimized();
 
   return (
     <OptimisticContext.Provider value={optimistic.context}>

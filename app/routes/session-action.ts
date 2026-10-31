@@ -32,6 +32,7 @@ import {
   movePin,
   queueMessage,
   restoreQueued,
+  setMinimized,
   setPinned,
   takeQueued,
 } from "~/lib/store.server";
@@ -48,6 +49,8 @@ const INTENTS = new Set([
   "pin",
   "unpin",
   "pin-move",
+  "minimize",
+  "restore",
   "rename",
   "answer",
   "approve",
@@ -268,6 +271,8 @@ async function perform(
     );
   } else if (intent === "pin" || intent === "unpin") {
     setPinned(sessionId, intent === "pin");
+  } else if (intent === "minimize" || intent === "restore") {
+    setMinimized([sessionId], intent === "minimize");
   } else if (intent === "rename") {
     const name = sessionName(form);
     const closed = await closedSession(sessionId);

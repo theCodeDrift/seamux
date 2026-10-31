@@ -151,6 +151,8 @@ export interface Card {
   pinned: boolean;
   // The pinned chat whose pin `/clear` carried to this one.
   clearedFrom: string | null;
+  // Folded to its title on the board, in every browser.
+  minimized: boolean;
   // Set when the chat itself is blocked on a dialog.
   waiting: Waiting | null;
   // Set when the chat's last turn ended on an error from the API rather
