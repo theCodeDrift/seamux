@@ -56,6 +56,7 @@ import {
   COUNTING,
   countdownTitle,
   CountdownRing,
+  SendIcon,
 } from "~/components/countdown";
 import { CmuxProblem } from "~/components/cmux-problem";
 import {
@@ -594,13 +595,26 @@ function ChatInput({
         <Button
           variant="secondary"
           size="lg"
-          className="w-full rounded-b-none border-b-0"
+          // A count left running by the full view shows here, as there is
+          // no send button to show it on.
+          className={cn(
+            "w-full rounded-b-none border-b-0",
+            left !== null && COUNTING,
+          )}
           onClick={() => setOpen(true)}
         >
-          <MessageSquare />
-          Open chat
-          {draft.trim() && (
-            <span className="font-normal text-muted-foreground">· draft</span>
+          <SendIcon left={left} icon={<MessageSquare />} />
+          {left === null ? (
+            <>
+              Open chat
+              {draft.trim() && (
+                <span className="font-normal text-muted-foreground">
+                  · draft
+                </span>
+              )}
+            </>
+          ) : (
+            `${queueing ? "Queueing" : "Sending"} in ${left}s`
           )}
         </Button>
         <ContextBar context={card.context} className="border-transparent" />
