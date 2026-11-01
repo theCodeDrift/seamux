@@ -60,7 +60,6 @@ import { queueEditsKey, scrollKey } from "~/lib/sweep";
 import { useCoarsePointer } from "~/lib/use-pointer";
 import { useSessionAction } from "~/lib/use-session-action";
 import { useSessionStorage } from "~/lib/use-session-storage";
-import { useTrigger } from "~/lib/use-trigger";
 import { keyHint, useSubmitKey } from "~/lib/use-submit-key";
 import { cn } from "~/lib/utils";
 
@@ -100,8 +99,9 @@ export function ChatModal({
   onDetach,
   onSend,
   canSend,
-  outgoing,
   trigger,
+  left,
+  typed,
   queueing,
   pending,
   error,
@@ -121,9 +121,12 @@ export function ChatModal({
   onDetach: (label: string) => void;
   onSend: () => void;
   canSend: boolean;
-  // The draft without the trigger phrase, which never goes with it.
-  outgoing: string;
   trigger: TriggerPhrase;
+  // The trigger phrase's countdown, which the card keeps so it goes on
+  // once this closes (useTrigger): the seconds to go, or null, and what to
+  // call with what is typed here.
+  left: number | null;
+  typed: (text: string) => void;
   queueing: boolean;
   pending: boolean;
   error: string | null;
@@ -263,15 +266,6 @@ export function ChatModal({
     onSend();
     onOpenChange(false);
   };
-
-  // Typed here to end in the trigger phrase, it sends on its own.
-  const { left, typed } = useTrigger({
-    text: draft,
-    outgoing,
-    seconds: trigger.seconds,
-    ready: open && canSend,
-    fire: send,
-  });
 
   const workers = workerCount(card.fanouts);
   const rail = workers > 0 || card.subagents.length > 0;

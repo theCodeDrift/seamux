@@ -528,14 +528,18 @@ function ChatInput({
   // sending: a long message waiting to go is visible at a glance.
   const lines = draft.split("\n").length;
   const multiline = lines > 1;
-  // Typed here to end in the trigger phrase, it sends on its own; the
-  // modal counts down for what is typed there.
+  // Typed here or in the full view to end in the trigger phrase, it sends
+  // on its own. The card keeps the count, so closing the full view doesn't
+  // stop it; sending from the full view closes it, as its send button does.
   const { left, typed } = useTrigger({
     text: draft,
     outgoing,
     seconds: trigger.seconds,
-    ready: canSend && !open && !multiline,
-    fire: send,
+    ready: canSend,
+    fire: () => {
+      send();
+      setOpen(false);
+    },
   });
   const form = useRef<HTMLFormElement>(null);
   const slash = useSlashMenu({
@@ -551,15 +555,23 @@ function ChatInput({
     anchor: form,
     portal: true,
   });
+  // A multiline draft has no send button here, so a count left running by
+  // the full view shows on this.
+  const counting = multiline && left !== null;
   const expand = (
     <Button
       type="button"
       size={multiline ? "icon-xs" : "icon-sm"}
       variant={multiline ? "default" : "ghost"}
-      title="Open full view"
+      className={counting ? COUNTING : undefined}
+      title={
+        counting
+          ? `${queueing ? "Queue" : "Send"} in ${left}s. Open the full view to edit it`
+          : "Open full view"
+      }
       onClick={() => setOpen(true)}
     >
-      <Maximize2 />
+      {counting ? <CountdownRing left={left} /> : <Maximize2 />}
     </Button>
   );
 
@@ -688,8 +700,9 @@ function ChatInput({
         onDetach={detach}
         onSend={send}
         canSend={canSend}
-        outgoing={outgoing}
         trigger={trigger}
+        left={left}
+        typed={typed}
         queueing={queueing}
         pending={pending}
         error={error ?? forker.error}
