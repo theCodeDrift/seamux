@@ -932,3 +932,54 @@ it("lists a directory once whatever path names it", async () => {
   ).toEqual([join(code, "app"), code, gone]);
   rmSync(root, { recursive: true });
 });
+
+it("lists a chat with no prompt yet after the others, where its first prompt puts it", async () => {
+  const project = join(process.env.HOME!, ".claude/projects/-work");
+  mkdirSync(project, { recursive: true });
+  const ids = {
+    older: "8d3b4a5c-6e7f-4a81-9c9d-2e3f4a5b6c7d",
+    spawned: "9e4c5b6d-7f80-4b92-8dae-3f4a5b6c7d8e",
+    newer: "af5d6c7e-8091-4ca3-9ebf-4a5b6c7d8e9f",
+  };
+  const prompt = (at: string) =>
+    JSON.stringify({
+      type: "user",
+      timestamp: at,
+      message: { role: "user", content: "fix the login" },
+    }) + "\n";
+  writeFileSync(
+    join(project, `${ids.older}.jsonl`),
+    prompt("2026-01-01T00:00:00Z"),
+  );
+  writeFileSync(
+    join(project, `${ids.newer}.jsonl`),
+    prompt("2026-01-02T00:00:00Z"),
+  );
+  // Just spawned: Claude Code hasn't written its transcript yet.
+  const agents = process.env.SEAMUX_TEST_CLAUDE_AGENTS!;
+  writeFileSync(
+    agents,
+    JSON.stringify(
+      Object.entries(ids).map(([name, sessionId], pid) => ({
+        pid: pid + 1,
+        cwd: "/work",
+        kind: "interactive",
+        startedAt: 0,
+        sessionId,
+        name,
+        status: "busy",
+      })),
+    ),
+  );
+  for (const id of Object.values(ids)) cmux.addSession(id);
+  try {
+    const { cards } = await loadBoard();
+    expect(
+      cards
+        .filter((c) => Object.values(ids).includes(c.sessionId))
+        .map((c) => c.name),
+    ).toEqual(["older", "newer", "spawned"]);
+  } finally {
+    rmSync(agents, { force: true });
+  }
+});

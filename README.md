@@ -51,7 +51,7 @@ The store at `data/seamux.db`, in `~/.seamux` or a clone, holds only what those 
 
 The header shows how hard the Mac is pressed for memory, as the share macOS no longer counts as available once it has weighed compression and swap, with memory and swap in use in its tooltip. It turns amber when the kernel reports memory pressure, and red when it reports critical pressure, past which macOS closes apps to free memory, chats mid-turn among them. While it is red, **Dispatch** asks before starting another chat.
 
-Each column lists cards by when you last sent them a prompt, oldest first, so the chat you've left longest is at the top. A working chat keeps its place while its turn runs instead of jumping to the bottom each time it writes.
+Each column lists cards by when you last sent them a prompt, oldest first, so the chat you've left longest is at the top. A working chat keeps its place while its turn runs instead of jumping to the bottom each time it writes. A chat you've just started goes at the bottom before its first prompt lands, so it stays there once cmux has it running.
 
 A card moves the moment you act on it, without waiting for the next rebuild. A message you send, a question you answer, or a tool you approve puts it in WORKING. Stop and resume put it in IDLE, and close puts it in DONE. A dispatch or a fork shows as a starting card in WORKING until its chat is listed. The board keeps the card where you put it until a rebuild agrees, or for 12 seconds, after which the rebuild's state wins. A card that finished its turn before any rebuild saw it working goes back to where it was. A close holds for as long as the close-session macro runs. If an action fails, the card goes back at once.
 

@@ -1321,8 +1321,14 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
   // Oldest prompt first, so the card the user last turned to is at the bottom
   // of its column. Only the user sends a prompt, so a working card keeps its
   // place while its turn writes to the transcript. Pinned cards keep the
-  // order the user dragged them into instead.
-  cards.sort((a, b) => (a.lastPromptAt ?? 0) - (b.lastPromptAt ?? 0));
+  // order the user dragged them into instead. A chat with no prompt yet, as
+  // one just spawned before its transcript holds one, goes last, where its
+  // first prompt will put it, so it doesn't jump from the top once sent.
+  cards.sort((a, b) =>
+    a.lastPromptAt === b.lastPromptAt
+      ? 0
+      : (a.lastPromptAt ?? Infinity) - (b.lastPromptAt ?? Infinity),
+  );
   const pinRank = new Map(pinRows.map((p, i) => [p.sessionId, i]));
   const rank = (c: Card) => pinRank.get(c.sessionId) ?? pinRows.length;
   cards.sort((a, b) => rank(a) - rank(b));
