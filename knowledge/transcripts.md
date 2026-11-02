@@ -15,7 +15,9 @@ Entries about transcripts that live in other domains:
 
 Each change is a `queue-operation` line: `enqueue` with the item's text, `dequeue`, `remove` with the text it drops, and `popAll`. A `dequeue` takes a typed prompt ahead of queued `<task-notification>` and `<agent-message>` hand-backs, which is how replaying the log leaves no typed prompt queued in any closed transcript. The board replays it to count and list what is queued in the terminal.
 
-- **Measured:** not recorded.
+A message from another session is the one item whose `remove` text differs from its `enqueue`: the enqueue carries a `hop-chain="…"` attribute on the `<cross-session-message>` tag, and the remove that takes it mid-turn leaves that attribute out. Matched exactly, the remove drops nothing, and the message stays queued for good, where each later `dequeue` takes it in place of the item it really took.
+
+- **Measured:** the hop-chain mismatch on Claude Code 2.1.316, in a chat messaged by two others; the rest not recorded.
 - **In seamux:** `queuedPrompts` in [board.server.ts](../app/lib/board.server.ts). The board's own queue, for messages waiting on an idle chat, is separate: [queue.server.ts](../app/lib/queue.server.ts).
 
 ## A prompt taken mid-turn is an attachment, not a user message

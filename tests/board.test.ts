@@ -858,6 +858,60 @@ it("shows a prompt sent while a turn ran, which Claude Code logs as a queued com
   ]);
 });
 
+it("drops a message from another session from the terminal queue once it is taken", async () => {
+  // As Claude Code 2.1.316 logs it: the enqueue carries a hop-chain
+  // attribute that the remove taking the message mid-turn leaves out.
+  const sessionId = "5b8e1f2a-9c3d-4e7f-b1a6-0d2c4e6f8a13";
+  const project = join(process.env.HOME!, ".claude/projects/-work");
+  mkdirSync(project, { recursive: true });
+  const message = (attrs: string) =>
+    `<cross-session-message from="uds:/tmp/cc-socks/1.sock"${attrs} from-name="peer" from-mode="prompting">\nDone.\n</cross-session-message>`;
+  const op = (operation: string, content?: string) => ({
+    type: "queue-operation",
+    operation,
+    timestamp: "2026-01-01T00:00:05Z",
+    sessionId,
+    ...(content === undefined ? {} : { content }),
+  });
+  writeFileSync(
+    join(project, `${sessionId}.jsonl`),
+    [
+      {
+        type: "user",
+        timestamp: "2026-01-01T00:00:00Z",
+        message: { role: "user", content: "Fix the thing" },
+      },
+      op("enqueue", message(' hop-chain="fec3000f8487c7b7dfa65b39"')),
+      op("remove", message("")),
+      op("enqueue", "And then this"),
+    ]
+      .map((l) => JSON.stringify(l))
+      .join("\n") + "\n",
+  );
+  const agents = process.env.SEAMUX_TEST_CLAUDE_AGENTS!;
+  writeFileSync(
+    agents,
+    JSON.stringify([
+      {
+        pid: 1,
+        cwd: "/work",
+        kind: "interactive",
+        startedAt: 0,
+        sessionId,
+        name: "demo",
+        status: "busy",
+      },
+    ]),
+  );
+  try {
+    const board = await loadBoard();
+    const card = board.cards.find((c) => c.sessionId === sessionId);
+    expect(card?.terminalQueue).toEqual(["And then this"]);
+  } finally {
+    rmSync(agents, { force: true });
+  }
+});
+
 it("lists a directory once whatever path names it", async () => {
   // As macOS's ~/code and ~/Code do: one folder under two spellings, which a
   // symlink stands in for on a disk that minds case.

@@ -283,6 +283,11 @@ function midTurnPrompt(o: any): string | null {
 // subagent hand-backs. The rest of the queue is prompts the user typed.
 const HARNESS_QUEUED = /^<(task-notification|agent-message)[\s>]/;
 
+// A message from another session is enqueued with a hop-chain attribute that
+// its remove leaves out, so the two match only without it.
+const HOP_CHAIN = / hop-chain="[^"]*"/;
+const queueKey = (content: string) => content.replace(HOP_CHAIN, "");
+
 // Claude Code logs its input queue as it changes. Replaying the log gives
 // what is still queued. A dequeue takes a typed prompt ahead of harness
 // items, and a remove names the item it drops.
@@ -304,7 +309,8 @@ function queuedPrompts(lines: string[]): string[] {
       const typed = queue.findIndex((c) => !HARNESS_QUEUED.test(c));
       queue.splice(typed >= 0 ? typed : 0, 1);
     } else if (o.operation === "remove") {
-      const at = queue.indexOf(content);
+      const key = queueKey(content);
+      const at = queue.findIndex((c) => queueKey(c) === key);
       if (at >= 0) queue.splice(at, 1);
     }
   }
