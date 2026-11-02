@@ -1350,7 +1350,10 @@ async function freshBase(cwd: string): Promise<Base> {
   );
   const commits = (n: number) => `${n} commit${n === 1 ? "" : "s"}`;
   if (behind > 0 && ahead === 0) {
-    note += ` The local ${branch} is ${commits(behind)} behind it. seamux leaves that branch alone, since someone's work may be on it: offer the user to fast-forward it.`;
+    // Only context: the worktree, its rebase and its pull request never
+    // need the local branch. Bringing it up merged work is worth offering
+    // only once this session has merged into it.
+    note += ` The local ${branch} is ${commits(behind)} behind it, which doesn't affect this worktree, its rebase or its pull request, so don't bring it up. Only if this session merges its work into ${branch}, by landing or merging a pull request, offer then to fast-forward the local ${branch} to include it; seamux never moves it itself.`;
   } else if (behind > 0) {
     note += ` The local ${branch} is ${commits(behind)} behind it and has ${commits(ahead)} of its own, which this worktree doesn't have: tell the user.`;
   }

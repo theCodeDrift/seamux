@@ -1172,6 +1172,9 @@ describe("dispatch", () => {
       const command = String(params.initial_command);
       expect(command).toContain("seamux fetched origin/main just now");
       expect(command).toContain("The local main is 1 commit behind it");
+      // Context only: no fast-forward offer until the session merges.
+      expect(command).not.toContain("offer the user to fast-forward");
+      expect(command).toContain("Only if this session merges its work into main");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
