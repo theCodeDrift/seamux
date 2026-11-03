@@ -87,13 +87,19 @@ export function fileRawUrl(path: string, base = "/file/raw"): string {
 // A path written without a link around it, in prose or as inline code:
 // `./content/post.md`, `~/notes.txt`, `/Users/me/a/b`, or `app/root.tsx:12`.
 // A bare relative path needs an extension, so `and/or` stays prose, and an
-// absolute one needs two segments, so `/file` does too.
-const SEGMENT = String.raw`[\w@%+=~.,-]+`;
+// absolute one needs two segments, so `/file` does too. An apostrophe
+// between letters, as in `jakob's notes.md`, is part of the path; one that
+// quotes it, as in `'./a.md'`, isn't.
+const APOSTROPHE = String.raw`(?<=\w)['’](?=\w)`;
+const SEGMENT = String.raw`(?:[\w@%+=~.,-]|${APOSTROPHE})+`;
 const LINE = String.raw`(?::\d+(?::\d+)?)?`;
 const BARE_PATH = new RegExp(
   String.raw`^(?:(?:\.{1,2}|~)(?:/${SEGMENT})+/?|(?:/${SEGMENT}){2,}/?|${SEGMENT}(?:/${SEGMENT})*/${SEGMENT}\.[A-Za-z]\w*)${LINE}$`,
 );
-const TOKEN = /(^|[\s(\[{"'])([^\s()[\]{}<>"'`]+)/g;
+const TOKEN = new RegExp(
+  String.raw`(^|[\s(\[{"'])((?:[^\s()[\]{}<>"'\x60]|${APOSTROPHE})+)`,
+  "g",
+);
 const TRAILING = /[.,;:!?]+$/;
 
 // The path a token is, less the punctuation of a path that ends a sentence.

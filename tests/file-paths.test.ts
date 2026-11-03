@@ -49,6 +49,17 @@ describe("bare paths", () => {
     ).toEqual([note]);
   });
 
+  it("carries a path across an apostrophe inside a word", () => {
+    const note = "./self/memory/jakob's writing style for documents.md";
+    expect(
+      links(`I also added your point to ${note}: alliteration is`, [note]),
+    ).toEqual([note]);
+    expect(links("see ./a/jakob's.md and './b/c.md'")).toEqual([
+      "./a/jakob's.md",
+      "./b/c.md",
+    ]);
+  });
+
   it("takes the longest path the server found", () => {
     expect(
       links("open /tmp/a b.tar c.gz now", [
