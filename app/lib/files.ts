@@ -122,8 +122,10 @@ function spacedPath(value: string): boolean {
 // after `path`: each one it could be, nearest first, never past the end of a
 // sentence, and only when `path` itself isn't already a file or a directory
 // written as one. Which of them is a file only the server can say
-// (`existingPaths` in files.server.ts), so a guess never links.
-const MAX_WORDS = 8;
+// (`existingPaths` in files.server.ts), so a guess never links. A note
+// titled as a sentence runs to a dozen words or more, so the bound is loose;
+// only the words with an extension cost the server a look.
+const MAX_WORDS = 32;
 function spacedTails(path: string, rest: string): string[] {
   if (!ANCHORED.test(path) || EXTENSION.test(path) || path.endsWith("/")) {
     return [];

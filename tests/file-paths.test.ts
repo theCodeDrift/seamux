@@ -41,6 +41,14 @@ describe("bare paths", () => {
     expect(links("I edited ~/notes and README.md")).toEqual(["~/notes"]);
   });
 
+  it("carries a path across a long title to the end of a sentence", () => {
+    const note =
+      "./__inbox/2026-11-03 engineers know agents ignore rules while VCs assume agents are flawless.md";
+    expect(
+      links(`I added that to the capture in ${note}. It now says`, [note]),
+    ).toEqual([note]);
+  });
+
   it("takes the longest path the server found", () => {
     expect(
       links("open /tmp/a b.tar c.gz now", [
