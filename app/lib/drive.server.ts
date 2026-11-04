@@ -483,13 +483,25 @@ const OPTION = /^(?:❯\s*)?([1-9])\.\s+(.+)$/;
 const ROW = /^ (❯| ) (\S.*)$/;
 // A line made of one box-drawing character: the rule a dialog opens under.
 const RULE = /^([▔─━])\1{7,}$/;
+// The rule under a dialog, with the chat's name set into it when it has one.
+const FOOTER_RULE = /^[─━]{8,}(?: .+ [─━]+)?$/;
+// The dashed rule between the command a permission prompt shows and its
+// question, which is the dialog's title once the command fills the screen.
+const DASHED_RULE = /^╌{8,}$/;
 
 // The dialog open at the bottom of the screen, or null. It must end on
-// Claude Code's "Esc to cancel" footer, so a list in a reply is never
-// mistaken for one.
+// Claude Code's "Esc to cancel" footer, with at most a rule under it, so a
+// list in a reply is never mistaken for one.
 function parseDialog(screen: string): Dialog | null {
   const raw = screen.split("\n").map((l) => l.trimEnd());
-  while (raw.length && !raw.at(-1)) raw.pop();
+  const dropBlanks = () => {
+    while (raw.length && !raw.at(-1)) raw.pop();
+  };
+  dropBlanks();
+  if (FOOTER_RULE.test(raw.at(-1)?.trim() ?? "")) {
+    raw.pop();
+    dropBlanks();
+  }
   if (!/Esc to cancel/.test(raw.at(-1) ?? "")) return null;
   const lines = raw.map((l) => l.trim());
 
@@ -501,8 +513,15 @@ function parseDialog(screen: string): Dialog | null {
   for (let at = found.at - 1; at >= 0 && !RULE.test(lines[at]); at--) {
     if (lines[at]) text.unshift(lines[at]);
   }
-  if (text.length === 0) return null;
-  const [title, ...detail] = text;
+  // A command above a dashed rule follows the question below it, without the
+  // box drawn down its left edge.
+  const dashed = text.map((l) => DASHED_RULE.test(l)).lastIndexOf(true);
+  const command = text
+    .slice(0, Math.max(dashed, 0))
+    .filter((l) => !DASHED_RULE.test(l))
+    .map((l) => l.replace(/^│ ?/, ""));
+  const [title, ...detail] = [...text.slice(dashed + 1), ...command];
+  if (!title) return null;
   return {
     title,
     detail,

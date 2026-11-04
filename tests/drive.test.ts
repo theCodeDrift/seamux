@@ -920,6 +920,80 @@ describe("dialogs", () => {
     expect(input(surface)).toEqual(["text:3"]);
   });
 
+  // A permission prompt in a named chat, as Claude Code 2.1.317 showed one
+  // whose command overflowed the screen: its top rule gone, a dashed rule over
+  // the question, and the chat's name in the rule under the footer.
+  const named = [
+    " │ python3 $S/nudges.py",
+    " │ ./check drafts/*.md 2>&1 | tail -40",
+    "╌".repeat(40),
+    " A variable in this command can't be checked before it runs",
+    "",
+    " Do you want to proceed?",
+    " ❯ 1. Yes                                        ",
+    "   2. No",
+    "",
+    " Esc to cancel · Tab to amend",
+    `${"─".repeat(40)} GTD daily ─`,
+    "",
+  ].join("\n");
+
+  it("reads a dialog over a named rule, its question as the title", async () => {
+    const { surface, workspace } = cmux.addSession("s");
+    surface.screen = named;
+    const dialog = await readDialog({
+      surfaceId: surface.id,
+      workspaceId: workspace.id,
+    });
+    expect(dialog).toMatchObject({
+      title: "A variable in this command can't be checked before it runs",
+      detail: [
+        "Do you want to proceed?",
+        "python3 $S/nudges.py",
+        "./check drafts/*.md 2>&1 | tail -40",
+      ],
+      options: ["Yes", "No"],
+      cursor: null,
+    });
+  });
+
+  it("answers a dialog over a named rule with the option's digit", async () => {
+    const { surface, workspace } = cmux.addSession("s");
+    surface.screen = named;
+    const { key } = (await readDialog({
+      surfaceId: surface.id,
+      workspaceId: workspace.id,
+    }))!;
+    await answerDialog("s", key, 0);
+    expect(input(surface)).toEqual(["text:1"]);
+  });
+
+  it("reads a dialog over an unnamed rule", async () => {
+    const { surface, workspace } = cmux.addSession("s");
+    surface.screen = `${screen}\n${"─".repeat(40)}\n`;
+    const dialog = await readDialog({
+      surfaceId: surface.id,
+      workspaceId: workspace.id,
+    });
+    expect(dialog?.title).toBe("Background work is running");
+  });
+
+  it("doesn't take a list above an empty prompt box for a dialog", async () => {
+    const { surface, workspace } = cmux.addSession("s");
+    surface.screen = [
+      " 1. First",
+      " 2. Second",
+      `${"─".repeat(40)} GTD daily ─`,
+      "❯ ",
+      "─".repeat(40),
+    ].join("\n");
+    const dialog = await readDialog({
+      surfaceId: surface.id,
+      workspaceId: workspace.id,
+    });
+    expect(dialog).toBeNull();
+  });
+
   // A tool's own confirmation, as Claude Code 2.1.289 shows the Artifact
   // tool's delete: no numbers, and digits do nothing.
   const unnumbered = [
@@ -1174,7 +1248,9 @@ describe("dispatch", () => {
       expect(command).toContain("The local main is 1 commit behind it");
       // Context only: no fast-forward offer until the session merges.
       expect(command).not.toContain("offer the user to fast-forward");
-      expect(command).toContain("Only if this session merges its work into main");
+      expect(command).toContain(
+        "Only if this session merges its work into main",
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

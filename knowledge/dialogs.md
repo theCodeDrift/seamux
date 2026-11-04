@@ -38,6 +38,22 @@ Against a throwaway artifact: `1`, `2` and `y` did nothing, and nothing reached 
 - **In seamux:** `cursorOptions` and `answerDialog` in [drive.server.ts](../app/lib/drive.server.ts), `pick` in [macros.server.ts](../app/lib/macros.server.ts), and the board swapping the approval for the dialog in [board.server.ts](../app/lib/board.server.ts).
 - **See also:** [A permission prompt's "No" has no fixed number](#a-permission-prompts-no-has-no-fixed-number), [A new folder stops on a trust dialog that nothing reports](launching.md#a-new-folder-stops-on-a-trust-dialog-that-nothing-reports), which is unnumbered the same way.
 
+## A permission prompt's call can stay out of the transcript until it's answered
+
+`claude agents` said `waitingFor: "permission prompt"` for 13 minutes while the transcript held nothing of the call: the file was last written at 09:08, and the prompt was answered at about 09:22. Once answered, the Bash call and the two todoist calls in its batch appeared, stamped 17:09:20 UTC to 17:09:26 UTC, minutes older than the write that put them there. So a card can't count on the transcript for an open prompt, and only the screen says there is one. Seen once, in a chat in auto mode whose subagent had just handed back. What makes a call wait is unmeasured.
+
+- **Measured:** Claude Code 2.1.317, cmux 0.64.23, on a live chat.
+- **In seamux:** `waitingOn` and the fallback to `readDialog` in [board.server.ts](../app/lib/board.server.ts).
+- **See also:** [A permission prompt can end on a rule under its footer](#a-permission-prompt-can-end-on-a-rule-under-its-footer-with-a-dashed-rule-over-its-question), [A tool's own confirmation numbers nothing](#a-tools-own-confirmation-numbers-nothing-puts-no-first-and-ignores-digits), where the transcript does hold the call.
+
+## A permission prompt can end on a rule under its footer, with a dashed rule over its question
+
+A Bash approval in a chat named "GTD daily" ended on `Esc to cancel · Tab to amend`, then a rule with the name set into it, `───…─── GTD daily ─`. Its command filled the screen, each line led by `│`, so the solid rule above the dialog had scrolled away, and a rule of `╌` stood between the command and "A variable in this command can't be checked before it runs" / "Do you want to proceed?". `1` approved it. `cmux read-screen` shows the screen's last lines only, so what opens a command that long isn't on it.
+
+- **Measured:** Claude Code 2.1.317, cmux 0.64.23, on a live chat.
+- **In seamux:** `FOOTER_RULE`, `DASHED_RULE` and `parseDialog` in [drive.server.ts](../app/lib/drive.server.ts).
+- **See also:** [A permission prompt's "No" has no fixed number](#a-permission-prompts-no-has-no-fixed-number).
+
 ## AskUserQuestion answers by digit
 
 On a single-select question a digit picks and moves on, and it submits outright when it is the only question. On a multi-select question, digits toggle and Tab moves on. The digit after the last option is "Type something", and a paste there submits the text. With several questions, or any multi-select one, a review screen comes last and `1` submits it.

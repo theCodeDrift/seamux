@@ -422,6 +422,54 @@ it("offers a tool's own No/Yes confirmation as its options, not Approve", async 
   }
 });
 
+it("offers a permission prompt's options when its call hasn't reached the transcript", async () => {
+  // Claude Code 2.1.317 held a Bash call out of the transcript until it was
+  // answered, so only the screen shows there is anything to answer.
+  const sessionId = "aaaaaaaa-0000-4000-8000-000000000031";
+  const agents = process.env.SEAMUX_TEST_CLAUDE_AGENTS!;
+  writeFileSync(
+    agents,
+    JSON.stringify([
+      {
+        pid: 1,
+        cwd: "/work",
+        kind: "interactive",
+        startedAt: 0,
+        sessionId,
+        name: "demo",
+        status: "waiting",
+        waitingFor: "permission prompt",
+      },
+    ]),
+  );
+  const { surface } = cmux.addSession(sessionId);
+  surface.screen = [
+    "╌".repeat(40),
+    " A variable in this command can't be checked before it runs",
+    "",
+    " Do you want to proceed?",
+    " ❯ 1. Yes",
+    "   2. No",
+    "",
+    " Esc to cancel · Tab to amend",
+    `${"─".repeat(40)} demo ─`,
+  ].join("\n");
+  try {
+    const board = await loadBoard();
+    const card = board.cards.find((c) => c.sessionId === sessionId);
+    expect(card?.waiting).toMatchObject({
+      reason: "permission prompt",
+      approval: null,
+      dialog: {
+        title: "A variable in this command can't be checked before it runs",
+        options: ["Yes", "No"],
+      },
+    });
+  } finally {
+    rmSync(agents, { force: true });
+  }
+});
+
 it("keeps a cleared chat drivable while cmux still files it under its old id", async () => {
   // /clear moves `claude agents` to the new id a moment before cmux.
   const agents = process.env.SEAMUX_TEST_CLAUDE_AGENTS!;

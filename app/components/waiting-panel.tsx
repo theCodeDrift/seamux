@@ -301,14 +301,18 @@ export function WaitingPanel({ card }: { card: Card }) {
               {w.detail}
             </span>
           )}
-          {w.dialog?.detail.map((line, i) => (
-            <span
-              key={i}
-              className="sensitive block break-words text-muted-foreground"
-            >
-              {line}
+          {w.dialog && w.dialog.detail.length > 0 && (
+            <span className="block max-h-48 overflow-y-auto">
+              {w.dialog.detail.map((line, i) => (
+                <span
+                  key={i}
+                  className="sensitive block break-words text-muted-foreground"
+                >
+                  {line}
+                </span>
+              ))}
             </span>
-          ))}
+          )}
         </span>
       </div>
       {w.dialog && (
