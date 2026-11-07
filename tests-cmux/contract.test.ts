@@ -188,6 +188,12 @@ describe("surfaces", () => {
       cmuxRpc("terminal.replay", t.target),
     ).resolves.not.toHaveProperty("render_grid");
     await cmuxRpc("surface.send_text", { ...t.target, text: "\x15" });
+    // A moment later: until then read_text goes on refusing.
+    await eventually(
+      async () =>
+        "render_grid" in (await cmuxRpc<object>("terminal.replay", t.target)),
+      "the terminal to start",
+    );
     await cmuxRpc("surface.send_text", {
       ...t.target,
       text: `[[ -o interactive ]] && echo ${m}-$((20+1))\n`,
