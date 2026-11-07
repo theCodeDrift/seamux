@@ -128,7 +128,7 @@ curl -u "$SEAMUX_USER:$SEAMUX_PASS" -X POST -H 'content-type: application/json' 
   -d '{"name": "pink-candy", "color": "light"}' http://localhost:54321/theme/set
 ```
 
-**Terminal font**, below the editor, sets the font for the [terminal](../README.md#terminal), as a CSS font family such as `MesloLGS NF`. Each device uses it only if it has the font installed, so a phone without it shows the board's own mono font, and glyphs only that font draws, such as a Nerd Font prompt's icons, show as boxes there. It applies under every theme.
+**Terminal font**, below the editor, sets the font for the [terminal](../README.md#terminal), its screen, type box and keys, as a CSS font family such as `MesloLGS NF`. Each device uses it only if it has the font installed, so a phone without it shows the board's own mono font, and glyphs only that font draws, such as a Nerd Font prompt's icons, show as boxes there. It applies under every theme.
 
 Over mDNS, use `http://<name>.local:54321/theme/set`.
 

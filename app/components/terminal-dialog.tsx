@@ -151,7 +151,7 @@ export function TerminalDialog({ font }: { font: string }) {
           )}
           <div className="flex min-w-0 flex-col gap-2">
             {trouble && <p className="text-destructive">{trouble}</p>}
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1 font-mono" style={fontStyle}>
               {TERMINAL_KEYS.map(({ key, label }) => (
                 <Button
                   key={key}
