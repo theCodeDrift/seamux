@@ -149,20 +149,32 @@ describe("surfaces", () => {
     expect(result.text).toEqual(expect.any(String));
   });
 
-  // readTerminal(): the board's terminal, scrollback included.
-  it("surface.read_text with lines reaches back into the scrollback, no further", async () => {
-    const t = await throwaway("seq 1 500; sleep 30");
-    await shows(t, "500");
-    const read = async (lines: number) =>
-      (
-        await cmuxRpc<{ text: string }>("surface.read_text", {
-          ...t.target,
-          lines,
-        })
-      ).text.split("\n");
-    expect(await read(300)).toHaveLength(300);
-    expect((await read(300)).join("\n")).toContain("\n250\n");
-    expect((await read(100)).join("\n")).not.toContain("\n250\n");
+  // readTerminal(): the panel draws the terminal in its own colours, with
+  // what cmux keeps of its scrollback above the screen.
+  it("terminal.replay gives colours as hex, and the scrollback on rows of its own", async () => {
+    const m = marker("colour");
+    const t = await throwaway(
+      `seq 1 500; printf '\\033[31m${m}\\033[0m\\n'; sleep 30`,
+    );
+    await shows(t, m);
+    const { render_grid: grid } = await cmuxRpc<{ render_grid: ReplayGrid }>(
+      "terminal.replay",
+      t.target,
+    );
+    const red = grid.row_spans.find((s) => s.text.includes(m))!;
+    const style = grid.styles.find((s) => s.id === red.style_id)!;
+    expect(style.foreground).toMatch(/^#[0-9A-F]{6}$/i);
+    expect(style.foreground_source).toBe("palette");
+    expect(style.foreground).not.toBe(grid.terminal_foreground);
+    expect(grid.terminal_background).toMatch(/^#[0-9A-F]{6}$/i);
+    expect(grid.scrollback_spans!.length).toBe(grid.scrollback_rows);
+    const rows = grid.scrollback_spans!.map((s) => s.row);
+    expect(rows).toEqual([...rows].sort((a, b) => a - b));
+    expect(rows[0]).toBe(0);
+    expect(grid.scrollback_spans!.at(-1)!.text).toMatch(/^\d+$/);
+    expect(Number(grid.scrollback_spans!.at(-1)!.text) + 1).toBe(
+      Number(grid.row_spans.find((s) => s.row === 0)!.text),
+    );
   });
 
   // openTerminal(): no initial_command, so nothing to exit and close it.
@@ -172,6 +184,9 @@ describe("surfaces", () => {
     // Unfocused with no command, it doesn't start until it gets input.
     const err = await refusal(cmuxRpc("surface.read_text", t.target));
     expect(err.code).toBe("internal_error");
+    await expect(
+      cmuxRpc("terminal.replay", t.target),
+    ).resolves.not.toHaveProperty("render_grid");
     await cmuxRpc("surface.send_text", { ...t.target, text: "\x15" });
     await cmuxRpc("surface.send_text", {
       ...t.target,
@@ -202,9 +217,7 @@ describe("surfaces", () => {
       t.target,
     );
     expect(grid.columns).toEqual(expect.any(Number));
-    const faint = new Set(
-      grid.styles.filter((s) => s.faint).map((s) => s.id),
-    );
+    const faint = new Set(grid.styles.filter((s) => s.faint).map((s) => s.id));
     const span = (text: string) =>
       grid.row_spans.find((s) => s.text.includes(text))!;
     expect(span(`plain-${m}`)).toMatchObject({
@@ -254,7 +267,10 @@ describe("surfaces", () => {
     const err = await refusal(
       cmuxRpc("surface.send_key", { ...t.target, key: "seamux-no-such-key" }),
     );
-    expect(err).toMatchObject({ code: "invalid_params", message: expect.stringMatching(/Unknown key/) });
+    expect(err).toMatchObject({
+      code: "invalid_params",
+      message: expect.stringMatching(/Unknown key/),
+    });
   });
 
   // What the fake answers for a surface the workspace doesn't have.
@@ -357,8 +373,10 @@ describe("the cmux command", () => {
   // launch(): the wrappers that start each agent and register it with cmux.
   it("ships the agent wrappers seamux launches through", () => {
     for (const wrapper of ["cmux-claude-wrapper", "cmux-codex-wrapper"]) {
-      expect(() => accessSync(join(CMUX_BIN, wrapper), constants.X_OK), wrapper)
-        .not.toThrow();
+      expect(
+        () => accessSync(join(CMUX_BIN, wrapper), constants.X_OK),
+        wrapper,
+      ).not.toThrow();
     }
   });
 

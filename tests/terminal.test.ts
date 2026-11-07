@@ -8,10 +8,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readConfig, setTerminalFont } from "~/lib/config.server";
 import { writeValue } from "~/lib/store.server";
 import { isTerminalKey } from "~/lib/terminal";
+import type { ReplayGrid } from "~/lib/harness.server";
 import {
   openTerminal,
   readTerminal,
   sendToTerminal,
+  terminalContent,
 } from "~/lib/terminal.server";
 import { FakeCmux } from "./fake-cmux";
 
@@ -39,6 +41,138 @@ afterEach(async () => {
 });
 
 const surface = () => cmux.workspaces[0].surfaces[0];
+
+const text = (lines: [string, number][][] | undefined) =>
+  lines?.map((line) => line.map(([t]) => t).join("")).join("\n");
+
+describe("drawing the terminal", () => {
+  const plain = {
+    id: 0,
+    faint: false,
+    foreground: "#FFFFFF",
+    foreground_source: "default",
+    background: "#282C34",
+    background_source: "default",
+  };
+  const grid = (over: Partial<ReplayGrid>): ReplayGrid => ({
+    columns: 79,
+    rows: 3,
+    row_spans: [],
+    styles: [plain],
+    terminal_foreground: "#FFFFFF",
+    terminal_background: "#282C34",
+    ...over,
+  });
+  const span = (row: number, column: number, t: string, style_id = 0) => ({
+    row,
+    column,
+    text: t,
+    cell_width: Array.from(t).length,
+    style_id,
+  });
+
+  it("carries the terminal's own colours", () => {
+    const { foreground, background } = terminalContent(grid({}));
+    expect({ foreground, background }).toEqual({
+      foreground: "#FFFFFF",
+      background: "#282C34",
+    });
+  });
+
+  it("puts the scrollback above the screen, oldest first", () => {
+    const { lines } = terminalContent(
+      grid({
+        scrollback_rows: 2,
+        scrollback_spans: [span(0, 0, "old"), span(1, 0, "older")],
+        row_spans: [span(0, 0, "now")],
+      }),
+    );
+    expect(text(lines)).toBe("old\nolder\nnow");
+  });
+
+  it("keeps a blank row between lines, and drops the ones below", () => {
+    const { lines } = terminalContent(
+      grid({ row_spans: [span(0, 0, "a"), span(2, 0, "b")] }),
+    );
+    expect(lines).toEqual([[["a", 0]], [], [["b", 0]]]);
+  });
+
+  it("fills the gap between two spans, by the columns text takes", () => {
+    const { lines } = terminalContent(
+      grid({
+        row_spans: [
+          { ...span(0, 0, "😀"), cell_width: 2 },
+          span(0, 4, "x"),
+          span(0, 2, "w"),
+        ],
+      }),
+    );
+    expect(text(lines)).toBe("😀w x");
+  });
+
+  it("sends only the styles in use, and merges what they don't split", () => {
+    const red = {
+      ...plain,
+      id: 7,
+      foreground: "#CC6666",
+      foreground_source: "palette",
+      bold: true,
+    };
+    const unused = { ...plain, id: 8, italic: true };
+    const { lines, styles } = terminalContent(
+      grid({
+        styles: [plain, red, unused],
+        row_spans: [
+          span(0, 0, "ok "),
+          span(0, 3, "bad", 7),
+          span(0, 6, "ly", 7),
+          span(0, 8, "!"),
+        ],
+      }),
+    );
+    expect(lines).toEqual([
+      [
+        ["ok ", 0],
+        ["badly", 1],
+        ["!", 0],
+      ],
+    ]);
+    expect(styles).toEqual([{}, { color: "#CC6666", bold: true }]);
+  });
+
+  it("swaps an inverse run's colours, its defaults resolved", () => {
+    const { styles } = terminalContent(
+      grid({
+        styles: [
+          plain,
+          { ...plain, id: 1, inverse: true },
+          {
+            ...plain,
+            id: 2,
+            inverse: true,
+            foreground: "#F07623",
+            foreground_source: "rgb",
+          },
+        ],
+        row_spans: [span(0, 0, "a", 1), span(0, 1, "b", 2)],
+      }),
+    );
+    expect(styles.slice(1)).toEqual([
+      { color: "#282C34", background: "#FFFFFF" },
+      { color: "#282C34", background: "#F07623" },
+    ]);
+  });
+
+  it("hides invisible text in its background", () => {
+    const { styles } = terminalContent(
+      grid({
+        styles: [plain, { ...plain, id: 1, invisible: true }],
+        row_spans: [span(0, 0, "secret", 1)],
+      }),
+    );
+    expect(styles[1]).toEqual({ color: "#282C34" });
+  });
+});
 
 describe("the terminal font", () => {
   afterEach(() => writeValue("terminalFont", undefined));
@@ -84,13 +218,13 @@ describe("the board's terminal", () => {
   it("starts it with a keystroke that leaves nothing on the line", async () => {
     await openTerminal();
     expect(surface().input).toEqual([{ kind: "text", value: "\x15" }]);
-    await expect(readTerminal()).resolves.toBe("");
+    expect(surface().unstarted).toBe(false);
   });
 
   it("reads one that hasn't started as blank, and typing starts it", async () => {
     await openTerminal();
     surface().unstarted = true;
-    await expect(readTerminal()).resolves.toBe("");
+    expect((await readTerminal())?.lines).toEqual([]);
     await sendToTerminal("ls", "enter");
     expect(surface().unstarted).toBe(false);
   });
@@ -106,12 +240,11 @@ describe("the board's terminal", () => {
     expect(cmux.calls("workspace.create")).toHaveLength(1);
   });
 
-  it("reads a bounded stretch of its scrollback, without the blank rows below", async () => {
+  it("reads the terminal's text, without the blank rows below it", async () => {
     await openTerminal();
     surface().screen = "one\ntwo\n\n\n";
-    await expect(readTerminal()).resolves.toBe("one\ntwo");
-    const [read] = cmux.calls("surface.read_text");
-    expect(read.params.lines).toEqual(expect.any(Number));
+    expect(text((await readTerminal())?.lines)).toBe("one\ntwo");
+    expect(cmux.calls("terminal.replay")).toHaveLength(1);
   });
 
   it("has nothing to read until one is opened", async () => {

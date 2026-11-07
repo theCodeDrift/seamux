@@ -75,7 +75,7 @@ Its `render_grid` has the terminal's `columns`, `row_spans` (each a run of text 
 Without it, `surface.read_text` returns the screen. With `lines`, it returns the last that many lines of screen and scrollback: after `seq 1 20000`, `lines: 50` gave 50 lines, and `scrollback: true` or `lines: 100000` gave 20,005 lines and 109,290 characters, so a board polling a shell has to bound it. A line longer than the terminal comes back whole: a 200-character line in a 79-column terminal read as one line of 200.
 
 - **Measured:** cmux 0.64.23.
-- **In seamux:** `history` on `Terminal` in [harness.server.ts](../app/lib/harness.server.ts), which [terminal.server.ts](../app/lib/terminal.server.ts) reads the board's terminal through.
+- **In seamux:** nothing yet: the board's terminal reads [`terminal.replay`](#terminalreplay-hands-over-240-rows-of-scrollback-however-many-there-are) for its colours, and gets less history for it.
 
 ## A terminal's size belongs to cmux's window, and nothing on the socket resizes it
 
@@ -98,6 +98,14 @@ After a shell exits, `surface.read_text` and `surface.send_key` on its surface a
 - **Measured:** cmux 0.64.23, on throwaway workspaces.
 - **In seamux:** `closed` in [terminal.server.ts](../app/lib/terminal.server.ts).
 - **See also:** [A workspace closes itself when its `initial_command` exits](#a-workspace-closes-itself-when-its-initial_command-exits).
+
+## `terminal.replay` hands over 240 rows of scrollback, however many there are
+
+After `seq 1 2000`, `render_grid` had `history_rows: 1975`, `scrollback_rows: 240`, and 240 rows in `scrollback_spans`, and `scrollback`, `scrollback_rows`, `max_scrollback`, `scrollback_limit`, `history_rows`, `limit`, `lines`, `rows` and `max_rows`, each set to 1000, changed none of that. `scrollback_spans` number their rows from 0, oldest first, and the row after the last is the screen's row 0. Each `styles` entry has `foreground` and `background` as hex, whatever the program set (palette, 256 or true colour), with `foreground_source` and `background_source` of `default`, `palette` or `rgb`, and `bold`, `italic`, `underline`, `strikethrough`, `inverse` and `invisible`. An inverse style holds the colours from before the swap. `terminal_foreground` and `terminal_background` are the terminal's own. A span says where it starts: `a`, ten columns' gap, `b` came as spans at columns 0 and 11 with nothing between, and an emoji had `cell_width: 2` for one character, so a line is put back together by column. A 200-character line came as three rows, of 79, 79 and 42 cells, so wrapped lines stay broken. On the alternate screen, as under a full-screen program, `active_screen` is `alternate` and `scrollback_rows` is 0. A reply carried 34 KB for 271 rows, 6 KB of it the theme, sent again every time.
+
+- **Measured:** cmux 0.64.23, on throwaway workspaces.
+- **In seamux:** `Terminal.grid` in [harness.server.ts](../app/lib/harness.server.ts), `terminalContent` in [terminal.server.ts](../app/lib/terminal.server.ts).
+- **See also:** [`terminal.replay` draws the screen as runs of styled text](#terminalreplay-draws-the-screen-as-runs-of-styled-text-where-surfaceread_text-has-only-the-text), [`surface.read_text` takes `lines`](#surfaceread_text-takes-lines-to-reach-into-the-scrollback).
 
 ## `surface.close` refuses a workspace's last tab
 

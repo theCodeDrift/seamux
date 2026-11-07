@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { SendHorizontal, Terminal } from "lucide-react";
 
 import { Button } from "~/components/ui/button";
@@ -13,10 +20,25 @@ import {
   TERMINAL_KEYS,
   type TerminalResult,
   type TerminalScreen,
+  type TerminalStyle,
 } from "~/lib/terminal";
 
 const POLL_MS = 1000;
 const AT_END_PX = 24;
+
+function runStyle(s: TerminalStyle): CSSProperties {
+  return {
+    color: s.color,
+    backgroundColor: s.background,
+    fontWeight: s.bold ? 700 : undefined,
+    fontStyle: s.italic ? "italic" : undefined,
+    opacity: s.faint ? 0.6 : undefined,
+    textDecorationLine:
+      [s.underline && "underline", s.strikethrough && "line-through"]
+        .filter(Boolean)
+        .join(" ") || undefined,
+  };
+}
 
 async function post(fields: Record<string, string>): Promise<TerminalResult> {
   try {
@@ -30,8 +52,8 @@ async function post(fields: Record<string, string>): Promise<TerminalResult> {
   }
 }
 
-// The board's one shell, for when the Mac is out of reach: its text, read
-// again every second, a box that types at it, and the keys a phone hasn't
+// The board's one shell, for when the Mac is out of reach: its text in its
+// own colours, read again every second, a box that types at it, and the keys a phone hasn't
 // got. Closing this leaves the shell running; `exit` in it ends it.
 export function TerminalDialog({ font }: { font: string }) {
   const [open, setOpen] = useState(false);
@@ -51,7 +73,7 @@ export function TerminalDialog({ font }: { font: string }) {
     } catch {
       if (!signal?.aborted) {
         setScreen((s) => ({
-          text: s?.text ?? null,
+          terminal: s?.terminal ?? null,
           error: "Can't reach the board",
         }));
       }
@@ -86,11 +108,11 @@ export function TerminalDialog({ font }: { font: string }) {
     };
   }, [open]);
 
-  const text = screen?.text ?? null;
+  const terminal = screen?.terminal ?? null;
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el && atEnd.current) el.scrollTop = el.scrollHeight;
-  }, [text]);
+  }, [terminal]);
 
   const send = (key: string | null) => {
     const fields = { text: draft, key: key ?? "" };
@@ -130,7 +152,7 @@ export function TerminalDialog({ font }: { font: string }) {
               this; type exit to end it.
             </DialogDescription>
           </DialogHeader>
-          {text === null && screen ? (
+          {terminal === null && screen ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg bg-muted p-3 text-muted-foreground">
               <p>No shell is open.</p>
               <Button variant="outline" onClick={() => void start()}>
@@ -145,10 +167,29 @@ export function TerminalDialog({ font }: { font: string }) {
                 atEnd.current =
                   el.scrollHeight - el.scrollTop - el.clientHeight < AT_END_PX;
               }}
-              style={fontStyle}
+              // The terminal's own ground in either of the board's themes:
+              // its colours were chosen for it.
+              style={{
+                ...fontStyle,
+                color: terminal?.foreground ?? undefined,
+                backgroundColor: terminal?.background ?? undefined,
+              }}
               className="sensitive overflow-auto rounded-lg bg-muted p-3 font-mono text-xs/snug whitespace-pre"
             >
-              {text}
+              {terminal?.lines.map((line, i) => (
+                <Fragment key={i}>
+                  {line.map(([text, style], j) =>
+                    style === 0 ? (
+                      text
+                    ) : (
+                      <span key={j} style={runStyle(terminal.styles[style])}>
+                        {text}
+                      </span>
+                    ),
+                  )}
+                  {"\n"}
+                </Fragment>
+              ))}
             </pre>
           )}
           <div className="flex min-w-0 flex-col gap-2">
@@ -159,7 +200,7 @@ export function TerminalDialog({ font }: { font: string }) {
                   key={key}
                   size="sm"
                   variant="outline"
-                  disabled={text === null}
+                  disabled={terminal === null}
                   aria-label={key}
                   // Leaves the box focused, and a phone's keyboard up.
                   onMouseDown={(e) => e.preventDefault()}
@@ -179,7 +220,7 @@ export function TerminalDialog({ font }: { font: string }) {
               <input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                disabled={text === null}
+                disabled={terminal === null}
                 aria-label="Type at the shell"
                 placeholder="Type, then Enter"
                 autoCapitalize="off"
@@ -193,7 +234,7 @@ export function TerminalDialog({ font }: { font: string }) {
               <Button
                 type="submit"
                 size="icon"
-                disabled={text === null}
+                disabled={terminal === null}
                 aria-label="Send"
               >
                 <SendHorizontal />

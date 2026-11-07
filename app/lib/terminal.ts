@@ -17,9 +17,31 @@ export function isTerminalKey(key: string): boolean {
   return key === "enter" || TERMINAL_KEYS.some((k) => k.key === key);
 }
 
-// What the panel polls: the terminal's text, or null with none open.
+// How a run of text is drawn. An empty style is the terminal's default.
+export interface TerminalStyle {
+  color?: string;
+  background?: string;
+  bold?: boolean;
+  faint?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strikethrough?: boolean;
+}
+
+// A run of text and the index of its style, kept short: the panel asks for
+// this every second, over whatever connection a phone has.
+export type TerminalRun = [text: string, style: number];
+
+export interface TerminalContent {
+  lines: TerminalRun[][];
+  styles: TerminalStyle[];
+  foreground: string | null;
+  background: string | null;
+}
+
+// What the panel polls: the terminal, or null with none open.
 export interface TerminalScreen {
-  text: string | null;
+  terminal: TerminalContent | null;
   error: string | null;
 }
 

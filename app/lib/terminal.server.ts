@@ -6,17 +6,24 @@
 import { homedir } from "node:os";
 
 import { CmuxError, cmuxRpc } from "./cmux.server.ts";
-import { Terminal, type Surface } from "./harness.server.ts";
+import {
+  Terminal,
+  type ReplayGrid,
+  type ReplaySpan,
+  type ReplayStyle,
+  type Surface,
+} from "./harness.server.ts";
 import { readValue, writeValue } from "./store.server.ts";
+import type {
+  TerminalContent,
+  TerminalRun,
+  TerminalStyle,
+} from "./terminal.ts";
 
 // A config key rather than a table: nothing else records which terminal is
 // the board's, and bumping SCHEMA_VERSION for it would drop every dispatch
 // and queued message. One a surface no longer answers to is simply forgotten.
 const TERMINAL_KEY = "terminal";
-
-// Enough to catch up on a log, and little enough to ask for every second
-// over a phone's connection.
-const LINES_SHOWN = 500;
 
 function terminal(): Terminal | null {
   const raw = readValue(TERMINAL_KEY) as Partial<Surface> | null | undefined;
@@ -31,16 +38,95 @@ function terminal(): Terminal | null {
 const closed = (err: unknown) =>
   err instanceof CmuxError && err.code === "not_found";
 
-// The terminal's text, or null when there isn't one to read.
-export async function readTerminal(): Promise<string | null> {
+const defaulted = (color?: string, source?: string) =>
+  source === "default" ? undefined : color;
+
+function styleOf(style: ReplayStyle, grid: ReplayGrid): TerminalStyle {
+  let color = defaulted(style.foreground, style.foreground_source);
+  let background = defaulted(style.background, style.background_source);
+  if (style.inverse) {
+    [color, background] = [
+      background ?? grid.terminal_background,
+      color ?? grid.terminal_foreground,
+    ];
+  }
+  if (style.invisible) color = background ?? grid.terminal_background;
+  return {
+    ...(color && { color }),
+    ...(background && { background }),
+    ...(style.bold && { bold: true }),
+    ...(style.faint && { faint: true }),
+    ...(style.italic && { italic: true }),
+    ...(style.underline && { underline: true }),
+    ...(style.strikethrough && { strikethrough: true }),
+  };
+}
+
+// The grid as lines of runs, oldest first, for the panel to draw. A span
+// says which column it starts at and nothing fills a gap between two, and
+// cmux already gives colours as hex, so only the layout is left to work out.
+export function terminalContent(grid: ReplayGrid): TerminalContent {
+  const scrollback = grid.scrollback_spans ?? [];
+  const above = grid.scrollback_rows ?? scrollback.length;
+  const rows = new Map<number, ReplaySpan[]>();
+  const place = (span: ReplaySpan, row: number) => {
+    rows.set(row, [...(rows.get(row) ?? []), span]);
+  };
+  for (const span of scrollback) place(span, span.row);
+  for (const span of grid.row_spans) place(span, span.row + above);
+
+  // Only the styles in use go to the browser, the plain one first.
+  const styles: TerminalStyle[] = [{}];
+  const indexes = new Map<number, number>();
+  const styleIndex = (id: number) => {
+    let index = indexes.get(id);
+    if (index === undefined) {
+      const style = grid.styles.find((s) => s.id === id);
+      const drawn = style ? styleOf(style, grid) : {};
+      index = Object.keys(drawn).length === 0 ? 0 : styles.push(drawn) - 1;
+      indexes.set(id, index);
+    }
+    return index;
+  };
+
+  const lines: TerminalRun[][] = [];
+  const last = Math.max(-1, ...rows.keys());
+  for (let row = 0; row <= last; row++) {
+    const line: TerminalRun[] = [];
+    const add = (text: string, style: number) => {
+      const end = line.at(-1);
+      if (end?.[1] === style) end[0] += text;
+      else line.push([text, style]);
+    };
+    let at = 0;
+    const spans = rows.get(row) ?? [];
+    for (const span of spans.sort((a, b) => a.column - b.column)) {
+      if (span.column > at) add(" ".repeat(span.column - at), 0);
+      add(span.text, styleIndex(span.style_id));
+      at = span.column + span.cell_width;
+    }
+    lines.push(line);
+  }
+  return {
+    lines,
+    styles,
+    foreground: grid.terminal_foreground ?? null,
+    background: grid.terminal_background ?? null,
+  };
+}
+
+// The terminal as the panel draws it, or null when there isn't one to read.
+// One that hasn't started yet has nothing on it. Should the keystroke below
+// never have come, anything typed starts it.
+export async function readTerminal(): Promise<TerminalContent | null> {
   const open = terminal();
   if (!open) return null;
   try {
-    return (await open.history(LINES_SHOWN)).trimEnd();
+    const grid = await open.grid();
+    return grid
+      ? terminalContent(grid)
+      : { lines: [], styles: [{}], foreground: null, background: null };
   } catch (err) {
-    // Started but not up yet: a blank screen, not a failure. Should the
-    // keystroke below never have come, anything typed starts it.
-    if (err instanceof CmuxError && err.code === "internal_error") return "";
     if (!closed(err)) throw err;
     writeValue(TERMINAL_KEY, undefined);
     return null;

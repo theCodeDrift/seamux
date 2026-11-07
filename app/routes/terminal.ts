@@ -16,9 +16,9 @@ export async function loader({
 }: Route.LoaderArgs): Promise<TerminalScreen> {
   assertLocalRead(request);
   try {
-    return { text: await readTerminal(), error: null };
+    return { terminal: await readTerminal(), error: null };
   } catch (err) {
-    return { text: null, error: (err as Error).message };
+    return { terminal: null, error: (err as Error).message };
   }
 }
 

@@ -358,12 +358,8 @@ export class FakeCmux {
         if (surface.unstarted) {
           throw new Refusal("internal_error", "Failed to read terminal text");
         }
-        // `lines` reaches back into the scrollback; without it, the screen.
-        const lines = Number(params.lines);
         return {
-          text: lines
-            ? surface.screen.split("\n").slice(-lines).join("\n")
-            : surface.screen,
+          text: surface.screen,
           surface_id: surface.id,
           workspace_id: params.workspace_id,
         };
@@ -374,7 +370,9 @@ export class FakeCmux {
           params.surface_id,
         );
         return {
-          render_grid: surface.grid ?? plainGrid(surface.screen),
+          ...(!surface.unstarted && {
+            render_grid: surface.grid ?? plainGrid(surface.screen),
+          }),
           surface_id: surface.id,
           workspace_id: params.workspace_id,
         };

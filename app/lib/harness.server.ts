@@ -361,13 +361,14 @@ export class Terminal {
     return readScreen(this.surface);
   }
 
-  // The last `lines` lines, scrollback included.
-  async history(lines: number): Promise<string> {
-    const { text } = await rpc<{ text: string }>("surface.read_text", {
-      ...target(this.surface),
-      lines,
-    });
-    return text;
+  // The screen and what cmux keeps of its scrollback, styled. Nothing yet
+  // from a terminal that hasn't started.
+  async grid(): Promise<ReplayGrid | undefined> {
+    const { render_grid } = await rpc<{ render_grid?: ReplayGrid }>(
+      "terminal.replay",
+      target(this.surface),
+    );
+    return render_grid;
   }
 
   // A named key, encoded by cmux the way a keypress would be.
@@ -598,16 +599,41 @@ export function inCursorBox(screen: string, text: string): boolean {
 
 // The screen as cmux's terminal.replay draws it: each run of text in one
 // style, by the row and column it starts at, and the styles they use.
+export interface ReplaySpan {
+  row: number;
+  column: number;
+  text: string;
+  cell_width: number;
+  style_id: number;
+}
+
+export interface ReplayStyle {
+  id: number;
+  faint: boolean;
+  // Hex. What the terminal's own default resolves to, with its source
+  // "default", where the text set no colour.
+  foreground?: string;
+  foreground_source?: string;
+  background?: string;
+  background_source?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strikethrough?: boolean;
+  inverse?: boolean;
+  invisible?: boolean;
+}
+
 export interface ReplayGrid {
   columns: number;
-  row_spans: {
-    row: number;
-    column: number;
-    text: string;
-    cell_width: number;
-    style_id: number;
-  }[];
-  styles: { id: number; faint: boolean }[];
+  rows?: number;
+  row_spans: ReplaySpan[];
+  // Numbered from 0, oldest first, on rows of their own above the screen's.
+  scrollback_rows?: number;
+  scrollback_spans?: ReplaySpan[];
+  styles: ReplayStyle[];
+  terminal_foreground?: string;
+  terminal_background?: string;
 }
 
 // What Claude Code's prompt box holds, as typed: the rows between the last
