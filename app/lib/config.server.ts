@@ -8,6 +8,7 @@ import {
   MACRO_NAMES,
   MACROS,
   MAX_MACRO,
+  MAX_TERMINAL_FONT,
   usesVariable,
   type Config,
   type MacroName,
@@ -47,6 +48,10 @@ export function readConfig(): Config {
       return isEngine(engine) ? engine : DEFAULT_CONFIG.defaultEngine;
     })(),
     triggerPhrase: readTrigger(get("triggerPhrase", null)),
+    terminalFont: (() => {
+      const font = get<unknown>("terminalFont", DEFAULT_CONFIG.terminalFont);
+      return typeof font === "string" ? font : DEFAULT_CONFIG.terminalFont;
+    })(),
     macros,
     projectColors: readProjectColors(get("projectColors", null)),
   };
@@ -86,6 +91,19 @@ export function setDefaultEngine(engine: string) {
     "defaultEngine",
     engine === DEFAULT_CONFIG.defaultEngine ? undefined : engine,
   );
+}
+
+// Empty goes back to the board's mono font.
+export function setTerminalFont(font: string) {
+  font = font.trim();
+  if (font.length > MAX_TERMINAL_FONT)
+    throw new Error("That font name is too long");
+  // An open quote would run on over the fallback fonts after it.
+  for (const quote of ['"', "'"]) {
+    if (font.split(quote).length % 2 === 0)
+      throw new Error(`That font name has an unclosed ${quote}`);
+  }
+  put("terminalFont", font || undefined);
 }
 
 // An empty phrase turns it off.

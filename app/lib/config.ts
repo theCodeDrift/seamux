@@ -177,11 +177,16 @@ export interface Config {
   defaultEngine: Engine;
   // The phrase that dispatches a prompt ending in it, and how long after.
   triggerPhrase: TriggerPhrase;
+  // The CSS font-family the terminal panel asks for, ahead of the board's
+  // mono font. Empty means just that one.
+  terminalFont: string;
   macros: Record<MacroName, { text: string; custom: boolean }>;
   // Colour slots picked for projects, by project path
   // (app/lib/project-colors.ts). A project not here gets a hashed slot.
   projectColors: Record<string, number>;
 }
+
+export const MAX_TERMINAL_FONT = 200;
 
 export const DEFAULT_CONFIG: Config = {
   directories: [],
@@ -189,6 +194,7 @@ export const DEFAULT_CONFIG: Config = {
   worktreeByDefault: false,
   defaultEngine: "claude",
   triggerPhrase: DEFAULT_TRIGGER,
+  terminalFont: "",
   macros: Object.fromEntries(
     MACRO_NAMES.map((name) => [
       name,

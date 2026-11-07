@@ -39,6 +39,7 @@ import {
   ENGINES,
   MACRO_NAMES,
   MACROS,
+  MAX_TERMINAL_FONT,
   type Config,
   type Engine,
   type MacroName,
@@ -222,6 +223,7 @@ function GeneralTab({
       <EngineSetting current={config.defaultEngine} installed={engines} />
       <WorktreeSetting on={config.worktreeByDefault} />
       <TriggerSetting trigger={config.triggerPhrase} />
+      <TerminalSetting font={config.terminalFont} />
       <NotificationSetting {...notifications} />
       {/* Last, since the list can grow long. */}
       <DirectoriesSetting directories={config.directories} />
@@ -381,6 +383,59 @@ function WorktreeSetting({ on }: { on: boolean }) {
           </span>
         </span>
       </label>
+      {action.error && <p className="text-destructive">{action.error}</p>}
+    </section>
+  );
+}
+
+function TerminalSetting({ font }: { font: string }) {
+  const action = useConfigAction();
+  const [value, setValue] = useState(font);
+  // Follows the saved value once it changes, as after a reset.
+  useEffect(() => setValue(font), [font]);
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="font-medium">Terminal font</h3>
+      <p className="text-muted-foreground">
+        The font for the terminal in the header, as a CSS font family. Names
+        with a digit first or a symbol need quotes. Each device uses it only if
+        it has the font installed, and otherwise shows the board's own.
+      </p>
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          action.submit("terminal-font", { font: value });
+        }}
+      >
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          maxLength={MAX_TERMINAL_FONT}
+          placeholder="The board's font"
+          aria-label="Terminal font"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          className="min-w-0 flex-1 rounded-md border bg-transparent px-2 py-1 text-sm"
+        />
+        <Button
+          type="submit"
+          size="sm"
+          disabled={action.pending || value.trim() === font}
+        >
+          Save
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={action.pending || !font}
+          onClick={() => action.submit("terminal-font", { font: "" })}
+        >
+          Reset
+        </Button>
+      </form>
       {action.error && <p className="text-destructive">{action.error}</p>}
     </section>
   );

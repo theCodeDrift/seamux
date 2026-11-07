@@ -33,7 +33,7 @@ async function post(fields: Record<string, string>): Promise<TerminalResult> {
 // The board's one shell, for when the Mac is out of reach: its text, read
 // again every second, a box that types at it, and the keys a phone hasn't
 // got. Closing this leaves the shell running; `exit` in it ends it.
-export function TerminalDialog() {
+export function TerminalDialog({ font }: { font: string }) {
   const [open, setOpen] = useState(false);
   const [screen, setScreen] = useState<TerminalScreen | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -103,6 +103,11 @@ export function TerminalDialog() {
   };
 
   const trouble = failure ?? screen?.error ?? null;
+  // A font this device lacks, or a glyph it lacks, falls through to the
+  // board's. A value CSS can't parse is ignored, leaving font-mono.
+  const fontStyle = font
+    ? { fontFamily: `${font}, var(--font-mono)` }
+    : undefined;
   return (
     <>
       <Button
@@ -138,6 +143,7 @@ export function TerminalDialog() {
                 atEnd.current =
                   el.scrollHeight - el.scrollTop - el.clientHeight < AT_END_PX;
               }}
+              style={fontStyle}
               className="sensitive overflow-auto rounded-lg bg-muted p-3 font-mono text-xs/snug whitespace-pre"
             >
               {text}
@@ -179,6 +185,7 @@ export function TerminalDialog() {
                 autoCorrect="off"
                 spellCheck={false}
                 enterKeyHint="send"
+                style={fontStyle}
                 className="sensitive min-w-0 flex-1 rounded-lg border border-input bg-transparent px-2.5 py-1 font-mono text-base outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm"
               />
               <Button

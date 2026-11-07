@@ -84,7 +84,7 @@ A card shows the last prompt and the end of the latest reply, with a reply box b
 
 ### Terminal
 
-The terminal icon in the header, before Configure, opens the board's one shell, for when the Mac is out of reach and you need to tail a log. It runs in a cmux workspace named `seamux terminal`, starting in your home directory, and the panel shows its last 500 lines as plain text, read again every second, so it's slow, and on a phone it scrolls sideways at cmux's width. Type in the box and press Enter, and use the row of keys for Ctrl+C, Esc, Tab, the arrows and Backspace. Closing the panel leaves the shell running for next time; `exit` ends it, and the icon starts a new one.
+The terminal icon in the header, before Configure, opens the board's one shell, for when the Mac is out of reach and you need to tail a log. It runs in a cmux workspace named `seamux terminal`, starting in your home directory, and the panel shows its last 500 lines as plain text, read again every second, so it's slow, and on a phone it scrolls sideways at cmux's width. Type in the box and press Enter, and use the row of keys for Ctrl+C, Esc, Tab, the arrows and Backspace. Closing the panel leaves the shell running for next time; `exit` ends it, and the icon starts a new one. **Terminal font** in Configure's General tab sets its font.
 
 ### Dispatching
 

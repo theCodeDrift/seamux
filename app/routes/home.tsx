@@ -2347,7 +2347,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                     seamux
                   </span>
                 </span>
-                <TerminalDialog />
+                <TerminalDialog font={config.terminalFont} />
                 <ConfigDialog
                   config={config}
                   engines={engines}

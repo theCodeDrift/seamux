@@ -9,6 +9,7 @@ import {
   setDefaultEngine,
   setMacro,
   setProjectColor,
+  setTerminalFont,
   setTriggerPhrase,
   setWorktreeByDefault,
 } from "~/lib/config.server";
@@ -42,6 +43,7 @@ const INTENTS = new Set([
   "worktree-default",
   "default-engine",
   "trigger-phrase",
+  "terminal-font",
   "save-macro",
   "reset-macro",
   "remote",
@@ -75,6 +77,8 @@ async function perform(intent: string, form: FormData, request: Request) {
     setDefaultEngine(field("engine"));
   } else if (intent === "trigger-phrase") {
     setTriggerPhrase(field("phrase"), Number(field("seconds")));
+  } else if (intent === "terminal-font") {
+    setTerminalFont(field("font"));
   } else if (intent === "save-macro" || intent === "reset-macro") {
     const name = field("name");
     if (!isMacroName(name)) throw new Error("Unknown macro");

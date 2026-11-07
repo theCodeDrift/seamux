@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { readConfig, setTerminalFont } from "~/lib/config.server";
 import { writeValue } from "~/lib/store.server";
 import { isTerminalKey } from "~/lib/terminal";
 import {
@@ -38,6 +39,35 @@ afterEach(async () => {
 });
 
 const surface = () => cmux.workspaces[0].surfaces[0];
+
+describe("the terminal font", () => {
+  afterEach(() => writeValue("terminalFont", undefined));
+
+  it("defaults to none, and an empty one goes back to that", () => {
+    expect(readConfig().terminalFont).toBe("");
+    setTerminalFont("  MesloLGS NF, monospace ");
+    expect(readConfig().terminalFont).toBe("MesloLGS NF, monospace");
+    setTerminalFont("   ");
+    expect(readConfig().terminalFont).toBe("");
+  });
+
+  it("refuses one too long to be a font", () => {
+    expect(() => setTerminalFont("x".repeat(201))).toThrow("too long");
+  });
+
+  it("takes quoted names, and refuses an open quote", () => {
+    setTerminalFont(`"0xProto", 'Fira Code'`);
+    expect(readConfig().terminalFont).toBe(`"0xProto", 'Fira Code'`);
+    expect(() => setTerminalFont(`"0xProto`)).toThrow("unclosed");
+    expect(() => setTerminalFont(`Fira's Code`)).toThrow("unclosed");
+    expect(readConfig().terminalFont).toBe(`"0xProto", 'Fira Code'`);
+  });
+
+  it("ignores a stored value that isn't a string", () => {
+    writeValue("terminalFont", 12);
+    expect(readConfig().terminalFont).toBe("");
+  });
+});
 
 describe("the board's terminal", () => {
   it("opens a plain shell in the home directory, without taking focus", async () => {
