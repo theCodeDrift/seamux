@@ -191,6 +191,7 @@ export function ConfigDialog({
             ) : tab === "themes" ? (
               <ThemesTab
                 theme={theme}
+                terminalFont={config.terminalFont}
                 local={!remote.viaTunnel && !remote.mdns.viaLan}
               />
             ) : tab === "remote" ? (
@@ -223,7 +224,6 @@ function GeneralTab({
       <EngineSetting current={config.defaultEngine} installed={engines} />
       <WorktreeSetting on={config.worktreeByDefault} />
       <TriggerSetting trigger={config.triggerPhrase} />
-      <TerminalSetting font={config.terminalFont} />
       <NotificationSetting {...notifications} />
       {/* Last, since the list can grow long. */}
       <DirectoriesSetting directories={config.directories} />
@@ -1058,7 +1058,15 @@ const REMOTE_VARIABLES = [
 // the right. Kept in seamux's store and shown on every board. The chosen
 // one is previewed on this browser until the tab closes; Make active shows
 // it on every board.
-function ThemesTab({ theme, local }: { theme: ThemeStatus; local: boolean }) {
+function ThemesTab({
+  theme,
+  terminalFont,
+  local,
+}: {
+  theme: ThemeStatus;
+  terminalFont: string;
+  local: boolean;
+}) {
   const [selected, setSelected] = useState<string | null>(theme.active.name);
   const [adding, setAdding] = useState(false);
   // A theme file's fields, for the new theme's editor to start from, and
@@ -1107,9 +1115,9 @@ function ThemesTab({ theme, local }: { theme: ThemeStatus; local: boolean }) {
   ];
   return (
     <div className="flex min-h-80 flex-1 flex-col gap-6">
-      <div className="grid min-h-0 flex-1 gap-4 max-md:grid-rows-[minmax(5rem,10rem)_minmax(0,1fr)] md:grid-cols-[11rem_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]">
+      <div className="grid flex-1 shrink-0 gap-4 max-md:grid-rows-[minmax(5rem,10rem)_auto] md:grid-cols-[11rem_minmax(0,1fr)]">
         <div className="flex min-h-0 flex-col gap-2">
-          <ul className="flex min-h-0 flex-1 flex-col divide-y overflow-y-auto rounded-lg border">
+          <ul className="flex min-h-0 flex-1 flex-col divide-y overflow-y-auto rounded-lg border md:max-h-72">
             {entries.map((t) => (
               <li key={t.name}>
                 <button
@@ -1227,6 +1235,7 @@ function ThemesTab({ theme, local }: { theme: ThemeStatus; local: boolean }) {
           <BuiltInTheme active={theme.active.name === DEFAULT_THEME} />
         )}
       </div>
+      <TerminalSetting font={terminalFont} />
       <ThemeSetSetting swap={theme.swap} local={local} />
     </div>
   );
@@ -1384,7 +1393,7 @@ function ThemeEditor({
         spellCheck={false}
         style={{ fieldSizing: "fixed" }}
         placeholder={`Empty: made from the ${mode === "light" ? "dark" : "light"} variant's brand colours`}
-        className="min-h-24 flex-1 resize-none font-mono text-xs"
+        className="min-h-48 flex-1 resize-none font-mono text-xs"
       />
       <p className="text-xs text-muted-foreground">
         JSON of token to value. Colours as hex,{" "}
