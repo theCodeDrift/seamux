@@ -348,19 +348,26 @@ export async function readScreen(surface: Surface): Promise<string> {
   return text;
 }
 
-// A chat's terminal, as a macro sees it: the primitives every macro is made
-// of, each speaking to cmux the one way that harness was measured to take.
-export class Session {
+// A cmux terminal, whatever runs in it: the primitives every keystroke goes
+// through.
+export class Terminal {
   readonly surface: Surface;
-  readonly harness: Harness;
 
-  constructor(surface: Surface, harness: Harness) {
+  constructor(surface: Surface) {
     this.surface = surface;
-    this.harness = harness;
   }
 
   screen(): Promise<string> {
     return readScreen(this.surface);
+  }
+
+  // The last `lines` lines, scrollback included.
+  async history(lines: number): Promise<string> {
+    const { text } = await rpc<{ text: string }>("surface.read_text", {
+      ...target(this.surface),
+      lines,
+    });
+    return text;
   }
 
   // A named key, encoded by cmux the way a keypress would be.
@@ -384,6 +391,17 @@ export class Session {
       if (at) await pause(TYPE_GAP_MS);
       await this.keys(chars.slice(at, at + TYPE_CHUNK).join(""));
     }
+  }
+}
+
+// A chat's terminal, as a macro sees it: the primitives, each speaking to
+// cmux the one way that harness was measured to take.
+export class Session extends Terminal {
+  readonly harness: Harness;
+
+  constructor(surface: Surface, harness: Harness) {
+    super(surface);
+    this.harness = harness;
   }
 
   // A message into the prompt box, the way this harness takes one, without

@@ -10,6 +10,14 @@ The field is `initial_command`, run through `zsh -lc`.
 - **In seamux:** `launch` in [drive.server.ts](../app/lib/drive.server.ts).
 - **See also:** [A workspace closes itself when its `initial_command` exits](cmux.md#a-workspace-closes-itself-when-its-initial_command-exits).
 
+## An unfocused `workspace.create` without `initial_command` doesn't start until it gets input
+
+Until then `surface.health` says `render_health: not_started`, `surface.read_text` answers `internal_error: Failed to read terminal text`, and it stayed that way for as long as anyone waited, here over a minute. `surface.send_text` of an empty string didn't start it. Ctrl+U (`\x15`) did, answered `queued: true`, and left a prompt with nothing on its line, readable 0.16 s later; `surface.send_key` `enter` did too, with a blank line above the prompt. `surface.health` said `not_started` even after the shell was up and answering, so it is no test for this. Once started it is the user's own interactive zsh in the given `cwd`, with `~/.zshrc` read and `claude` defined as cmux's wrapper function, and `exit` closes its workspace. `initial_command: "exec /bin/zsh -il"` also starts one, but `claude` is then a plain command, without cmux's wrapper function. cmux reports no session for either.
+
+- **Measured:** cmux 0.64.23, on throwaway workspaces.
+- **In seamux:** `start` and `readTerminal` in [terminal.server.ts](../app/lib/terminal.server.ts); `unstarted` in [tests/fake-cmux.ts](../tests/fake-cmux.ts) and the contract in [tests-cmux/contract.test.ts](../tests-cmux/contract.test.ts).
+- **See also:** [A closed workspace answers every surface call `not_found`](cmux.md#a-closed-workspace-answers-every-surface-call-not_found).
+
 ## That login shell does not read `~/.zshrc`
 
 So neither `claude` nor `node` is on its `PATH`, and nor is anything else `~/.zshrc` sets up, such as pnpm's `npx`. seamux wraps the launch in `exec zsh -ic`, which reads it and runs fine on cmux's tty, then launches through cmux's own `cmux-claude-wrapper`, which also registers the session with cmux, with `~/.local/bin` and the server's Node directory prepended. Launching `claude` directly starts a session cmux never learns about, which the board then cannot drive.

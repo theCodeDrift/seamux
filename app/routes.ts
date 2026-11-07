@@ -7,6 +7,7 @@ export default [
   route("sessions/:sessionId/commands", "routes/session-commands.ts"),
   route("services/:service/action", "routes/service-action.ts"),
   route("dispatch", "routes/dispatch.ts"),
+  route("terminal", "routes/terminal.ts"),
   route("directories", "routes/directories.ts"),
   route("config", "routes/config.ts"),
   route("diagnostics", "routes/diagnostics.ts"),

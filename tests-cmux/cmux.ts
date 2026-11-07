@@ -21,13 +21,19 @@ const created: string[] = [];
 export const marker = (label: string) =>
   `${label}-${Math.random().toString(36).slice(2, 10)}`;
 
-// A new workspace, unfocused, running `command`. Closed by closeThrowaways.
-export async function throwaway(command: string): Promise<Throwaway> {
+// A new workspace, unfocused, running `command`, or a plain shell without
+// one. Closed by closeThrowaways.
+export async function throwaway(command?: string): Promise<Throwaway> {
   const cwd = realpathSync(mkdtempSync(join(tmpdir(), "seamux-contract-")));
   const title = marker("seamux-contract");
   const result = await cmuxRpc<{ workspace_id: string; surface_id: string }>(
     "workspace.create",
-    { cwd, title, initial_command: command, focus: false },
+    {
+      cwd,
+      title,
+      ...(command ? { initial_command: command } : {}),
+      focus: false,
+    },
   );
   created.push(result.workspace_id);
   return {

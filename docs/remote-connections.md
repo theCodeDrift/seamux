@@ -7,6 +7,8 @@ Out of the box the board answers only this Mac: a request must come from this Ma
 
 On a phone the board shows one column at a time; see [Columns](../README.md#columns). Through the tunnel it can also be added to the Home Screen, where it opens full screen with its own icon.
 
+Anyone these let in gets the board's [terminal](../README.md#terminal), a shell on this Mac as you, along with everything else the board does, so keep the password and the Access policy tight.
+
 Both sit under one switch, **Enable remote connections**. With it off, neither is open and the Remote tab hides their settings. With it on, each has its own switch, and both can be on at once: say, a phone at home over mDNS and a laptop elsewhere through the tunnel. Each keeps its own login: the password at the `.local` name, Cloudflare Access at the tunnel's hostname.
 
 Whenever `SEAMUX_USER` and `SEAMUX_PASS` are set, every request asks for them, from this Mac too and for every file the board serves, except through the tunnel, where Cloudflare Access is the login. Every switch on the tab can only be turned on from this Mac, and turns off from anywhere, so a lost phone can't reopen the board once you've shut it.

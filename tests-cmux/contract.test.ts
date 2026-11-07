@@ -149,6 +149,46 @@ describe("surfaces", () => {
     expect(result.text).toEqual(expect.any(String));
   });
 
+  // readTerminal(): the board's terminal, scrollback included.
+  it("surface.read_text with lines reaches back into the scrollback, no further", async () => {
+    const t = await throwaway("seq 1 500; sleep 30");
+    await shows(t, "500");
+    const read = async (lines: number) =>
+      (
+        await cmuxRpc<{ text: string }>("surface.read_text", {
+          ...t.target,
+          lines,
+        })
+      ).text.split("\n");
+    expect(await read(300)).toHaveLength(300);
+    expect((await read(300)).join("\n")).toContain("\n250\n");
+    expect((await read(100)).join("\n")).not.toContain("\n250\n");
+  });
+
+  // openTerminal(): no initial_command, so nothing to exit and close it.
+  it("workspace.create without initial_command stays open at a shell that reads its rc files", async () => {
+    const m = marker("rc");
+    const t = await throwaway();
+    // Unfocused with no command, it doesn't start until it gets input.
+    const err = await refusal(cmuxRpc("surface.read_text", t.target));
+    expect(err.code).toBe("internal_error");
+    await cmuxRpc("surface.send_text", { ...t.target, text: "\x15" });
+    await cmuxRpc("surface.send_text", {
+      ...t.target,
+      text: `[[ -o interactive ]] && echo ${m}-$((20+1))\n`,
+    });
+    await shows(t, `${m}-21`);
+    await cmuxRpc("surface.send_text", { ...t.target, text: "exit\n" });
+    await eventually(
+      () =>
+        refusal(cmuxRpc("surface.read_text", t.target)).then(
+          (err) => err.code === "not_found",
+          () => false,
+        ),
+      "a shell that exits to close its workspace",
+    );
+  });
+
   // readDraft(): the prompt box, less the faint text that typed text never
   // is, Claude Code's placeholder and its suggestion of what to send.
   it("terminal.replay draws the screen as runs of text, the faint ones marked", async () => {

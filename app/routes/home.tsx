@@ -73,6 +73,7 @@ import { DispatchBar } from "~/components/dispatch-bar";
 import { workerCount } from "~/components/worker-list";
 import { Markdown } from "~/components/markdown";
 import { SeamuxMark } from "~/components/seamux-mark";
+import { TerminalDialog } from "~/components/terminal-dialog";
 import { ThemeToggle } from "~/components/theme-toggle";
 import {
   titleWithCount,
@@ -2342,10 +2343,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   <span className="shrink-0">
                     <SeamuxMark size={32} />
                   </span>
-                  <span className="truncate text-xl font-bold tracking-tight text-foreground">
+                  <span className="truncate text-xl font-bold tracking-tight text-foreground max-sm:sr-only">
                     seamux
                   </span>
                 </span>
+                <TerminalDialog />
                 <ConfigDialog
                   config={config}
                   engines={engines}

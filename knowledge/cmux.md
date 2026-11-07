@@ -70,6 +70,35 @@ Its `render_grid` has the terminal's `columns`, `row_spans` (each a run of text 
 - **In seamux:** `readDraft` in [drive.server.ts](../app/lib/drive.server.ts), `ReplayGrid` and `promptBoxDraft` in [harness.server.ts](../app/lib/harness.server.ts); `terminal.replay` in [tests/fake-cmux.ts](../tests/fake-cmux.ts) and [tests-cmux/contract.test.ts](../tests-cmux/contract.test.ts).
 - **See also:** [A suggested next prompt reads as a draft on the screen](prompt-box.md#a-suggested-next-prompt-reads-as-a-draft-on-the-screen-and-only-its-faint-style-and-the-cursor-tell-it-apart).
 
+## `surface.read_text` takes `lines` to reach into the scrollback
+
+Without it, `surface.read_text` returns the screen. With `lines`, it returns the last that many lines of screen and scrollback: after `seq 1 20000`, `lines: 50` gave 50 lines, and `scrollback: true` or `lines: 100000` gave 20,005 lines and 109,290 characters, so a board polling a shell has to bound it. A line longer than the terminal comes back whole: a 200-character line in a 79-column terminal read as one line of 200.
+
+- **Measured:** cmux 0.64.23.
+- **In seamux:** `history` on `Terminal` in [harness.server.ts](../app/lib/harness.server.ts), which [terminal.server.ts](../app/lib/terminal.server.ts) reads the board's terminal through.
+
+## A terminal's size belongs to cmux's window, and nothing on the socket resizes it
+
+A workspace created unfocused, which nothing has drawn, was 79 columns by 31 rows by `stty size`. `surface.resize` is `method_not_found`, and `terminal.viewport` with `columns: 44, rows: 30` answered `columns: 79, rows: 31` and changed nothing. So a phone shows the terminal at cmux's width and scrolls sideways.
+
+- **Measured:** cmux 0.64.23, on a throwaway workspace.
+- **In seamux:** the terminal panel in [terminal-dialog.tsx](../app/components/terminal-dialog.tsx).
+
+## `surface.send_key` knows the keys a shell needs, and a key a shell doesn't bind leaves bytes on its line
+
+Besides the keys [below](#surfacesend_key-encodes-a-key-the-way-a-keypress-would-be-and-the-cmux-command-goes-through-the-socket-too), cmux takes `up`, `down`, `left`, `right`, `backspace`, `delete`, `ctrl+c`, `ctrl+d`, `ctrl+l`, `ctrl+z`, `home`, `end` and `pageup`, and refuses anything else with `invalid_params: Unknown key`. In zsh, `up` recalled the last line, `left` and `backspace` edited it, `tab` completed `ech` to `echo`, `ctrl+c` stopped a `sleep`, and `ctrl+d` at an empty prompt ended the shell and closed its workspace. After `pageup`, which zsh doesn't bind there, the next line typed began with a stray `~`, the end of the key's escape sequence.
+
+- **Measured:** cmux 0.64.23, zsh 5.9, on a throwaway workspace.
+- **In seamux:** `TERMINAL_KEYS` in [terminal.ts](../app/lib/terminal.ts), which leaves out `ctrl+d` and `pageup`.
+
+## A closed workspace answers every surface call `not_found`
+
+After a shell exits, `surface.read_text` and `surface.send_key` on its surface answer `not_found: Workspace not found`, and `workspace.list` can still list the workspace for a moment after `workspace.close` returns: about 3 seconds after a shell's `exit`, and right after a close, where two seconds later it had gone. Ask a surface itself whether it's there, rather than the list.
+
+- **Measured:** cmux 0.64.23, on throwaway workspaces.
+- **In seamux:** `closed` in [terminal.server.ts](../app/lib/terminal.server.ts).
+- **See also:** [A workspace closes itself when its `initial_command` exits](#a-workspace-closes-itself-when-its-initial_command-exits).
+
 ## `surface.close` refuses a workspace's last tab
 
 It answers `Cannot close the last surface`, so for the last tab seamux calls `workspace.close` instead.

@@ -31,6 +31,8 @@ export interface Request {
 }
 
 export interface FakeSurface {
+  // Its terminal hasn't started, so it has no text to read.
+  unstarted?: boolean;
   id: string;
   // What surface.read_text returns: the terminal's screen.
   screen: string;
@@ -96,6 +98,11 @@ export const KEYS = [
   "down",
   "shift+enter",
   "shift+tab",
+  "up",
+  "left",
+  "right",
+  "backspace",
+  "ctrl+c",
 ];
 
 // Methods that act on one terminal, which must always be named: cmux falls
@@ -314,6 +321,8 @@ export class FakeCmux {
           focus: Boolean(params.focus),
         });
         const surface = this.addSurface(workspace);
+        // Unfocused with no command, cmux starts it at its first input.
+        surface.unstarted = !params.focus && !params.initial_command;
         return { workspace_id: workspace.id, surface_id: surface.id };
       }
       case "workspace.rename": {
@@ -346,8 +355,15 @@ export class FakeCmux {
           this.workspaceById(params.workspace_id),
           params.surface_id,
         );
+        if (surface.unstarted) {
+          throw new Refusal("internal_error", "Failed to read terminal text");
+        }
+        // `lines` reaches back into the scrollback; without it, the screen.
+        const lines = Number(params.lines);
         return {
-          text: surface.screen,
+          text: lines
+            ? surface.screen.split("\n").slice(-lines).join("\n")
+            : surface.screen,
           surface_id: surface.id,
           workspace_id: params.workspace_id,
         };
@@ -383,6 +399,7 @@ export class FakeCmux {
           value: String(method === "surface.send_key" ? params.key : params.text),
         };
         surface.input.push(input);
+        surface.unstarted = false;
         for (const listener of this.listeners) listener(surface, input);
         return {};
       }
