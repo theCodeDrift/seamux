@@ -117,7 +117,9 @@ export function TerminalDialog({ font }: { font: string }) {
         aria-label="Terminal"
         onClick={() => setOpen(true)}
       >
-        <Terminal />
+        {/* Its underscore stops 2px short of the icon's box, so it floats
+            above the name's baseline beside the taller gear. */}
+        <Terminal className="translate-y-0.5" />
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="h-[min(40rem,calc(100dvh-2rem))] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-3xl max-md:h-dvh! max-md:max-w-none! max-md:rounded-none max-md:pt-[max(1rem,env(safe-area-inset-top))] max-md:pb-[max(1rem,env(safe-area-inset-bottom))] max-md:ring-0">
