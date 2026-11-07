@@ -2338,26 +2338,27 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             {/* Below md the header stays put while the page scrolls, with a
                 band above it covering the notch so nothing shows through. */}
             <header className="flex items-center justify-between gap-4 text-sm text-muted-foreground max-md:sticky max-md:top-[env(safe-area-inset-top)] max-md:z-20 max-md:-mx-4 max-md:-mt-4 max-md:h-14 max-md:bg-background max-md:px-4 max-md:before:absolute max-md:before:inset-x-0 max-md:before:bottom-full max-md:before:h-[env(safe-area-inset-top)] max-md:before:bg-background">
-              <span className="flex min-w-0 items-center gap-1">
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <span className="shrink-0">
-                    <SeamuxMark size={32} />
-                  </span>
+              <span className="flex min-w-0 items-center gap-2.5">
+                <span className="shrink-0">
+                  <SeamuxMark size={32} />
+                </span>
+                {/* The icons sit on the name's baseline. */}
+                <span className="flex min-w-0 items-baseline gap-1">
                   <span className="truncate text-xl font-bold tracking-tight text-foreground max-sm:sr-only">
                     seamux
                   </span>
+                  <TerminalDialog font={config.terminalFont} />
+                  <ConfigDialog
+                    config={config}
+                    engines={engines}
+                    remote={remote}
+                    theme={theme}
+                    notifications={notifications}
+                    diagnostics={diagnostics}
+                    blur={blur}
+                  />
+                  <ThemeToggle />
                 </span>
-                <TerminalDialog font={config.terminalFont} />
-                <ConfigDialog
-                  config={config}
-                  engines={engines}
-                  remote={remote}
-                  theme={theme}
-                  notifications={notifications}
-                  diagnostics={diagnostics}
-                  blur={blur}
-                />
-                <ThemeToggle />
               </span>
               <span className="flex shrink-0 items-center gap-1 md:hidden">
                 <MemoryBadge memory={board.memory} className="mr-1" />
