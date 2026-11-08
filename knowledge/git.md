@@ -24,3 +24,10 @@ A full `git clone` sets `refs/remotes/origin/HEAD` to the remote's default branc
 
 - **Measured:** git 2.50.1 (Apple Git-155), with the default `branch.autoSetupMerge`.
 - **In seamux:** `createWorktree` in [drive.server.ts](../app/lib/drive.server.ts).
+
+## A fast-forward of the local default branch refuses everything but a fast-forward
+
+`git fetch . origin/main:main` moved a `main` that no checkout had checked out up to `origin/main`, refused a `main` with commits of its own (`! [rejected] origin/main -> main (non-fast-forward)`, exit 1), and refused a `main` checked out anywhere (`fatal: refusing to fetch into branch 'refs/heads/main' checked out at …`, exit 128). In the checkout that has `main` checked out, `git merge --ff-only origin/main` refused the same diverged `main` (`fatal: Not possible to fast-forward, aborting.`, exit 128). So the session can run them without asking, and asks only when one fails.
+
+- **Measured:** git 2.50.1 (Apple Git-155), against a local bare remote.
+- **In seamux:** `freshBase` in [drive.server.ts](../app/lib/drive.server.ts), which tells the session to fast-forward once it has merged.

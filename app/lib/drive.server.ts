@@ -1370,12 +1370,17 @@ async function freshBase(cwd: string): Promise<Base> {
   const commits = (n: number) => `${n} commit${n === 1 ? "" : "s"}`;
   if (behind > 0 && ahead === 0) {
     // Only context: the worktree, its rebase and its pull request never
-    // need the local branch. Bringing it up merged work is worth offering
-    // only once this session has merged into it.
-    note += ` The local ${branch} is ${commits(behind)} behind it, which doesn't affect this worktree, its rebase or its pull request, so don't bring it up. Only if this session merges its work into ${branch}, by landing or merging a pull request, offer then to fast-forward the local ${branch} to include it; seamux never moves it itself.`;
+    // need the local branch.
+    note += ` The local ${branch} is ${commits(behind)} behind it, which doesn't affect this worktree, its rebase or its pull request, so don't bring it up.`;
   } else if (behind > 0) {
     note += ` The local ${branch} is ${commits(behind)} behind it and has ${commits(ahead)} of its own, which this worktree doesn't have: tell the user.`;
   }
+  // Once this session's work is in the remote's branch, bringing the local
+  // one up to it is free when it only fast-forwards, so asking just leaves
+  // the chat waiting. git refuses anything else, which is then the user's
+  // call: their own commits, or changes in the checkout that has it
+  // checked out.
+  note += ` If this session merges its work into ${branch}, by landing or merging a pull request, then fast-forward the local ${branch} to include it without asking: fetch ${tracking}, then run \`git merge --ff-only ${tracking}\` in the checkout that has ${branch} checked out, which \`git worktree list\` shows, or \`git fetch . ${tracking}:${branch}\` if none has it. Ask the user only if that fails, and never force it. seamux never moves it itself.`;
   return { ref, note };
 }
 

@@ -1246,11 +1246,15 @@ describe("dispatch", () => {
       const command = String(params.initial_command);
       expect(command).toContain("seamux fetched origin/main just now");
       expect(command).toContain("The local main is 1 commit behind it");
-      // Context only: no fast-forward offer until the session merges.
-      expect(command).not.toContain("offer the user to fast-forward");
+      // Context only: nothing to do about it until the session merges, and
+      // then a fast-forward without asking, unless it fails.
+      expect(command).not.toContain("offer to fast-forward");
       expect(command).toContain(
-        "Only if this session merges its work into main",
+        "If this session merges its work into main, by landing or merging a pull request, then fast-forward the local main to include it without asking",
       );
+      expect(command).toContain("git merge --ff-only origin/main");
+      expect(command).toContain("git fetch . origin/main:main");
+      expect(command).toContain("Ask the user only if that fails");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
