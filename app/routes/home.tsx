@@ -543,6 +543,16 @@ function ChatInput({
       setOpen(false);
     },
   });
+  // Saying the phrase in the full view means the message is done, so the
+  // view closes as the count starts, back to the board, where the card
+  // goes on counting. Only the start closes it: opened again during the
+  // count, to edit or stop it, it stays.
+  const counted = useRef(false);
+  useEffect(() => {
+    const now = left !== null;
+    if (now && !counted.current) setOpen(false);
+    counted.current = now;
+  }, [left, setOpen]);
   const form = useRef<HTMLFormElement>(null);
   const slash = useSlashMenu({
     sessionId: card.sessionId,
