@@ -1,5 +1,22 @@
 # seamux
 
+## 0.5.1
+
+### Patch Changes
+
+- 6185d4a: A path in a reply with an apostrophe in its name, such as `./notes/jakob's style.md`, links whole instead of stopping at the apostrophe.
+- b253455: Add a terminal to the board: the terminal icon in the header, before Configure, opens one reusable shell on the Mac, in a cmux workspace of its own, so you can tail a log from your phone. It shows the terminal in its own colours, with about 270 rows of history, read again every second, with a box to type in and keys for Ctrl+C, Esc, Tab, the arrows and Backspace. Closing the panel leaves the shell running; `exit` ends it. Terminal font, in Configure's Themes tab, sets its font on any device that has that font installed.
+- 5239ff8: A message from another session no longer stays on a card's terminal queue after the chat has taken it, and no longer pushes later queued messages off the list in its place.
+- 9794a0a: A new worktree from the dispatch bar starts from the remote's default branch, fetched just before it is made, not from whatever the checkout last pulled, so it is no longer days or hundreds of commits behind. seamux leaves your local default branch where it is: the How to worktree macro tells the session what it was branched from and how far behind the local branch is, and the session offers to fast-forward it. When the fetch fails, the session is told so, with the commit and date it started from instead. The macro has a new `{{base}}` variable for this, and also has the session suggest adding a fresh start to the repo's own worktree convention when that convention lacks one. A How to worktree macro you have customised keeps your text, so add `{{base}}` to it to get the new line. Forks into a new worktree still branch from what their chat has checked out.
+- fcb6f9f: A path with spaces in a reply links whole even when its file name runs past eight words, such as a note titled as a full sentence.
+- 78bb3f8: A minimized card stays minimized in every browser: the board keeps which cards are folded, instead of each browser keeping its own. The cards a browser had minimized carry over the first time it opens the board.
+- 168de11: A chat you've just started now shows at the bottom of its column from the start, where its first prompt puts it, instead of at the top until then and jumping down once the session is up.
+- 6c00bc4: A session in a new worktree no longer offers to fast-forward your local default branch. The How to worktree line still says how far behind the remote it is, as context, and once the session has merged its own work into that branch, by landing or merging a pull request, it fast-forwards the branch itself, asking you only when it can't fast-forward, so the chat no longer sits waiting on a question with one answer.
+- 2b17648: A file path with spaces in a reply, such as `~/Dropbox/2026-10-27 Receipt (1).pdf`, links as one path to the file viewer, written bare or as inline code, rather than stopping at its first space. The board looks for it on disk first, so words after a path that only look like the rest of it stay prose.
+- b18b7fb: A permission prompt that hasn't reached the transcript yet gets its Yes and No on the card, with the command it shows and a warning such as "A variable in this command can't be checked before it runs", instead of a bare "Needs approval" with nothing to press. A named chat's rule under a dialog no longer hides the dialog from the board.
+- 8f7011f: Saying the trigger phrase in a chat's full view now closes it as the count starts, back to the board, where the card goes on counting down. Open the full view again to edit or stop the message; opened again, it stays open when the count sends it.
+- 6c3bd9d: A trigger phrase sends for you: a prompt in the dispatch bar, or a reply in a card or a chat's full view, that you type to end in "make it so" goes on its own after 15 seconds, with the send button turning the colour of a waiting chat and counting down meanwhile, so a dictated message can be sent by saying so. The phrase isn't sent, any edit starts the count over, and taking the phrase off stops it. Closing a chat's full view while it counts doesn't stop it: the card carries on counting and sends it, and on a phone its Open chat button counts down meanwhile. Change the phrase or the wait, or turn it off, under Trigger phrase in the General tab.
+
 ## 0.5.0
 
 ### Minor Changes
