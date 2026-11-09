@@ -532,21 +532,18 @@ function ChatInput({
   const multiline = lines > 1;
   // Typed here or in the full view to end in the trigger phrase, it sends
   // on its own. The card keeps the count, so closing the full view doesn't
-  // stop it; sending from the full view closes it, as its send button does.
+  // stop it.
   const { left, typed } = useTrigger({
     text: draft,
     outgoing,
     seconds: trigger.seconds,
     ready: canSend,
-    fire: () => {
-      send();
-      setOpen(false);
-    },
+    fire: send,
   });
   // Saying the phrase in the full view means the message is done, so the
   // view closes as the count starts, back to the board, where the card
   // goes on counting. Only the start closes it: opened again during the
-  // count, to edit or stop it, it stays.
+  // count, to edit or stop it, it stays open, through the send too.
   const counted = useRef(false);
   useEffect(() => {
     const now = left !== null;
