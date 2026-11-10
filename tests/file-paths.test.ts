@@ -5,7 +5,12 @@ import type { Root } from "mdast";
 import { describe, expect, it } from "vitest";
 
 import { remarkFilePaths } from "~/lib/files";
-import { existingPaths, findExistingPaths } from "~/lib/files.server";
+import {
+  existingPaths,
+  findExistingPaths,
+  findRootedLinks,
+  projectRoot,
+} from "~/lib/files.server";
 
 // The links remarkFilePaths makes of one line of prose, or of one inline code
 // span, as their urls, given the paths with spaces the server found.
@@ -98,5 +103,35 @@ describe("existing paths", () => {
     const first = existingPaths(reply, dir);
     expect(existingPaths(reply, dir)).toBe(first);
     expect(await first).toEqual([reply]);
+  });
+});
+
+describe("links relative to the project's root", () => {
+  const root = mkdtempSync(join(tmpdir(), "seamux-root-"));
+  mkdirSync(join(root, ".git"));
+  mkdirSync(join(root, "content", "drafts"), { recursive: true });
+  mkdirSync(join(root, "content", "slides"));
+  writeFileSync(join(root, "content", "slides", "deck.pdf"), "");
+  writeFileSync(join(root, "content", "drafts", "beside.md"), "");
+  writeFileSync(join(root, "content", "slides", "my deck.pdf"), "");
+  const dir = join(root, "content", "drafts");
+
+  it("finds the project a file is in", async () => {
+    expect(await projectRoot(dir)).toBe(root);
+    expect(await projectRoot(root)).toBe(root);
+  });
+
+  it("resolves against the root only what isn't beside the file", async () => {
+    const doc = [
+      "The deck: `content/slides/deck.pdf`, or [it](content/slides/deck.pdf).",
+      "Beside it: [here](beside.md) and `./beside.md`.",
+      "Nowhere: `content/slides/gone.pdf`.",
+      "Spaced: `./content/slides/my deck.pdf`.",
+    ].join("\n");
+    const paths = await findExistingPaths(doc, root);
+    expect(paths).toEqual(["./content/slides/my deck.pdf"]);
+    expect((await findRootedLinks(doc, dir, root, paths)).sort()).toEqual(
+      ["content/slides/deck.pdf", "./content/slides/my deck.pdf"].sort(),
+    );
   });
 });

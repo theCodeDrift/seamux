@@ -18,7 +18,9 @@ import { cn } from "~/lib/utils";
 // tab, so following one never navigates the board away. A link to a file on
 // disk, relative to `base` or absolute, opens it in the /file viewer, and so
 // does a path written bare. A bare path with spaces links only when it is
-// one of `paths`, those the server found on disk.
+// one of `paths`, those the server found on disk. A link in `rooted`, which
+// the server found under `root` and not beside `base`, resolves against
+// `root` instead.
 // Memoized: parsing and highlighting is the costliest part of a render, and
 // the board renders every card again on each poll, with a new `paths` array
 // each time.
@@ -27,11 +29,17 @@ export const Markdown = memo(
     children,
     base,
     paths,
+    root,
+    rooted,
   }: {
     children: string;
     base: string;
     paths?: string[];
+    root?: string;
+    rooted?: string[];
   }) {
+    const resolve = (href: string) =>
+      linkedPath(href, root && rooted?.includes(href) ? root : base);
     return (
       <ReactMarkdown
         remarkPlugins={[
@@ -45,11 +53,11 @@ export const Markdown = memo(
         rehypePlugins={[[rehypeHighlight, { detect: false }]]}
         // The default drops `style.css:12` as an unknown scheme.
         urlTransform={(url) =>
-          linkedPath(url, base) ? url : defaultUrlTransform(url)
+          resolve(url) ? url : defaultUrlTransform(url)
         }
         components={{
           a: ({ node: _node, href, ...props }) => {
-            const path = href ? linkedPath(href, base) : null;
+            const path = href ? resolve(href) : null;
             return (
               <a
                 {...props}
@@ -61,7 +69,7 @@ export const Markdown = memo(
           },
           pre: ({ node: _node, ...props }) => <CodeBlock {...props} />,
           img: ({ node: _node, src, ...props }) => {
-            const path = typeof src === "string" ? linkedPath(src, base) : null;
+            const path = typeof src === "string" ? resolve(src) : null;
             return (
               <img
                 {...props}
@@ -78,6 +86,8 @@ export const Markdown = memo(
   (a, b) =>
     a.children === b.children &&
     a.base === b.base &&
+    a.root === b.root &&
+    (a.rooted ?? []).join("\0") === (b.rooted ?? []).join("\0") &&
     (a.paths ?? []).join("\0") === (b.paths ?? []).join("\0"),
 );
 

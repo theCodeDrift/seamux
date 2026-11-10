@@ -5,7 +5,7 @@ import { randomBytes } from "node:crypto";
 import { createReadStream, type Stats } from "node:fs";
 import { open, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { extname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { Readable } from "node:stream";
 
 import remarkFrontmatter from "remark-frontmatter";
@@ -13,7 +13,14 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 
-import { linkedPath, SANDBOX_FLAGS, spacedCandidates } from "./files.ts";
+import type { Nodes } from "mdast";
+
+import {
+  linkedPath,
+  remarkFilePaths,
+  SANDBOX_FLAGS,
+  spacedCandidates,
+} from "./files.ts";
 
 // A rendered HTML page runs sandboxed, in an opaque origin, so its own
 // stylesheets and scripts arrive as cross-site requests with no Referer:
@@ -144,6 +151,54 @@ export async function findExistingPaths(
     spacedCandidates(parser.parse(text)).map(async (candidate) => {
       const path = linkedPath(candidate, base);
       return path && (await resolveFile(path)) ? [candidate] : [];
+    }),
+  );
+  return found.flat();
+}
+
+// The project a file is in: the nearest directory above it holding a
+// `.git`, a checkout's directory or a worktree's file. Null outside one.
+export async function projectRoot(dir: string): Promise<string | null> {
+  for (let at = dir; ; at = dirname(at)) {
+    if (await statOrNull(join(at, ".git"))) return at;
+    if (at === "/" || dirname(at) === at) return null;
+  }
+}
+
+// A document in a project often names its files as the session that wrote
+// it saw them, relative to the project's root rather than to the document:
+// `content/slides/deck.pdf` from `content/drafts/prep.md`. The links in
+// `text` that are no file beside it, at `dir`, but are one under `root`, as
+// the markdown wrote them, for the renderer to resolve against `root`.
+// `paths` are the paths with spaces the renderer will link.
+export async function findRootedLinks(
+  text: string,
+  dir: string,
+  root: string,
+  paths: string[],
+): Promise<string[]> {
+  if (root === dir) return [];
+  const tree = parser.parse(text);
+  remarkFilePaths({ paths })(tree);
+  const urls = new Set<string>();
+  const collect = (node: Nodes) => {
+    if (
+      node.type === "link" ||
+      node.type === "image" ||
+      node.type === "definition"
+    ) {
+      urls.add(node.url);
+    }
+    if ("children" in node) for (const child of node.children) collect(child);
+  };
+  collect(tree);
+  const found = await Promise.all(
+    [...urls].map(async (url) => {
+      const beside = linkedPath(url, dir);
+      const rooted = linkedPath(url, root);
+      if (!beside || !rooted || beside === rooted) return [];
+      if (await resolveFile(beside)) return [];
+      return (await resolveFile(rooted)) ? [url] : [];
     }),
   );
   return found.flat();

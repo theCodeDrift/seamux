@@ -24,7 +24,14 @@ import {
   SANDBOX_FLAGS,
   type FileView,
 } from "~/lib/files";
-import { findExistingPaths, loadFile, SANDBOX_BASE } from "~/lib/files.server";
+import {
+  findExistingPaths,
+  findRootedLinks,
+  loadFile,
+  projectRoot,
+  SANDBOX_BASE,
+  type FileEntry,
+} from "~/lib/files.server";
 import { assertLocalRead } from "~/lib/guard.server";
 import { useLocalStorage } from "~/lib/use-session-storage";
 import { cn } from "~/lib/utils";
@@ -41,11 +48,33 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!path) throw data("No path", { status: 400 });
   const file = await loadFile(path);
   if (!file) throw data(`Not found: ${path}`, { status: 404 });
-  const paths =
-    file.type === "file" && file.kind === "markdown" && file.text
-      ? await findExistingPaths(file.text, dirnameOf(file.path))
-      : [];
-  return { file, paths, sandboxBase: SANDBOX_BASE };
+  const links = await markdownLinks(file);
+  return { file, ...links, sandboxBase: SANDBOX_BASE };
+}
+
+// What a markdown file's links need from the disk: the paths with spaces
+// that are files, beside it or under its project's root, and the links that
+// resolve against that root because nothing beside the file has their name.
+async function markdownLinks(file: FileEntry): Promise<{
+  paths: string[];
+  root: string | null;
+  rooted: string[];
+}> {
+  if (file.type !== "file" || file.kind !== "markdown" || !file.text) {
+    return { paths: [], root: null, rooted: [] };
+  }
+  const dir = dirnameOf(file.path);
+  const root = await projectRoot(dir);
+  const found = await Promise.all(
+    [dir, ...(root && root !== dir ? [root] : [])].map((base) =>
+      findExistingPaths(file.text!, base),
+    ),
+  );
+  const paths = [...new Set(found.flat())];
+  const rooted = root
+    ? await findRootedLinks(file.text, dir, root, paths)
+    : [];
+  return { paths, root, rooted };
 }
 
 // Switching between raw and rendered changes only `view`; the loader
@@ -92,7 +121,7 @@ function formatSize(bytes: number): string {
 }
 
 export default function FileViewer({ loaderData }: Route.ComponentProps) {
-  const { file, paths, sandboxBase } = loaderData;
+  const { file, paths, root, rooted, sandboxBase } = loaderData;
   useWatch(file.path, file.mtime);
   const [params, setParams] = useSearchParams();
   const renderable =
@@ -223,7 +252,12 @@ export default function FileViewer({ loaderData }: Route.ComponentProps) {
               "prose-pre:bg-muted prose-pre:text-foreground prose-code:before:content-none prose-code:after:content-none",
             )}
           >
-            <Markdown base={dirnameOf(file.path)} paths={paths}>
+            <Markdown
+              base={dirnameOf(file.path)}
+              paths={paths}
+              root={root ?? undefined}
+              rooted={rooted}
+            >
               {file.text ?? ""}
             </Markdown>
           </article>
