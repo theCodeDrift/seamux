@@ -340,10 +340,11 @@ export function ChatModal({
           </details>
         )}
 
-        {/* What the chat is blocked on, answered here as on its card. */}
+        {/* What the chat is blocked on, answered here as on its card. An
+            answered question closes the view, back to the board. */}
         {card.waiting && (
           <div className="max-h-[40dvh] shrink-0 overflow-y-auto text-xs max-md:text-sm">
-            <WaitingPanel card={card} />
+            <WaitingPanel card={card} onAnswered={() => onOpenChange(false)} />
           </div>
         )}
 

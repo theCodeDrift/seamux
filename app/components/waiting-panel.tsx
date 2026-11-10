@@ -27,15 +27,20 @@ const BOX =
 function QuestionForm({
   card,
   ask,
+  onAnswered,
 }: {
   card: Card;
   ask: NonNullable<Waiting["ask"]>;
+  onAnswered?: () => void;
 }) {
   const [drafts, update] = useQuestionDrafts(
     ask.toolUseId,
     ask.questions.length,
   );
-  const { submit, pending, error } = useSessionAction(card.sessionId);
+  const { submit, pending, error } = useSessionAction(
+    card.sessionId,
+    onAnswered,
+  );
   const answers = ask.questions.map((q, i) => answerOf(q, drafts[i]));
   const ready = card.drivable && !pending && answers.every((a) => a != null);
 
@@ -262,12 +267,26 @@ function DialogButtons({
 }
 
 // What a WAITING card is blocked on: its question to answer, the question
-// its reply ended on, or the tool call waiting for approval.
-export function WaitingPanel({ card }: { card: Card }) {
+// its reply ended on, or the tool call waiting for approval. `onAnswered`
+// runs once a question's answer has gone through.
+export function WaitingPanel({
+  card,
+  onAnswered,
+}: {
+  card: Card;
+  onAnswered?: () => void;
+}) {
   const w = card.waiting;
   if (!w) return null;
   if (w.ask)
-    return <QuestionForm key={w.ask.toolUseId} card={card} ask={w.ask} />;
+    return (
+      <QuestionForm
+        key={w.ask.toolUseId}
+        card={card}
+        ask={w.ask}
+        onAnswered={onAnswered}
+      />
+    );
   // Answered with the reply box, like any message.
   if (w.reason === ASKED_IN_REPLY) {
     return (
