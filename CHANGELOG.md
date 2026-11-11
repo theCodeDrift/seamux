@@ -1,5 +1,14 @@
 # seamux
 
+## 0.5.2
+
+### Patch Changes
+
+- 7097754: Answering a question from a chat's full view closes it once the answer goes through, back to the board, on a phone as on a desktop. A failed answer leaves the view open with its error.
+- 6d2a237: A chat that dies while starting no longer vanishes without a trace. Its cmux workspace stays open with what the agent printed and how it exited, and its card in Working turns red with that line until you dismiss it. Before, the workspace closed with the agent, and the starting card disappeared after 90 seconds without a word. A chat still not on the board after 90 seconds now says so too.
+- 4e4fdd8: A markdown file open in the file viewer now follows links written relative to its project's root, as a session writes them, such as `content/slides/deck.pdf` in `content/drafts/prep.md`: a link that names no file beside the document, but does name one under the nearest folder with a `.git`, opens that one.
+- 0386c3c: The trigger phrase now waits for the text to stop changing for a moment, under a second, before its count starts. Typing "make it so" on the way to a longer sentence no longer closes a chat's full view or lights up the send button mid-sentence; a dictated phrase still starts the count almost at once.
+
 ## 0.5.1
 
 ### Patch Changes
