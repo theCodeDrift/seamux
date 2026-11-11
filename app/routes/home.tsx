@@ -33,6 +33,7 @@ import {
   SendHorizontal,
   Square,
   Trash2,
+  TriangleAlert,
   Wifi,
   X,
 } from "lucide-react";
@@ -112,6 +113,7 @@ import {
   type Board,
   type Card as BoardCard,
   type Column,
+  type FailedStart,
   type SendFailure,
   type Subagent,
 } from "~/lib/board";
@@ -1610,6 +1612,71 @@ function StartingCard({ spawn }: { spawn: Spawning }) {
   );
 }
 
+// A chat seamux started that never showed up: why, from the line its
+// terminal was left showing, until dismissed. One merely slow to show up
+// says so, and gives way to its own card if it does.
+function FailedStartCard({ start }: { start: FailedStart }) {
+  const dismisser = useSessionAction(start.sessionId);
+  useReportError("start-dismiss", dismisser.error);
+  return (
+    <Card
+      size="sm"
+      className={cn(
+        EDGE_FRAME,
+        CARD_OUTLINE,
+        "relative",
+        EDGE.working,
+        ENGINE_CORNER[start.engine],
+      )}
+    >
+      <CardHeader className="grid-cols-[minmax(0,1fr)]">
+        <CardTitle className="sensitive truncate max-md:text-base">
+          {firstWords(start.name.split("\n")[0], 8)}
+        </CardTitle>
+        <CardDescription className="flex items-center gap-1.5 text-xs max-md:text-sm">
+          <PathSwatch cwd={start.cwd} />
+          <span className="sensitive truncate font-mono">
+            {shortPath(start.cwd)}
+          </span>
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2 text-xs max-md:text-sm">
+        <p className="sensitive line-clamp-2 rounded-md bg-muted px-2 py-1">
+          <span className="font-medium">
+            {start.forked ? "Tangent: " : "Goal: "}
+          </span>
+          {start.intent}
+        </p>
+        <div
+          className={cn(
+            "flex flex-col gap-1 rounded-md px-2 py-1",
+            start.final
+              ? "bg-destructive/10 text-destructive"
+              : "bg-warning/10 text-warning-text",
+          )}
+        >
+          <span className="flex items-center gap-1 font-medium">
+            <TriangleAlert className="size-3.5 shrink-0" />
+            <span className="min-w-0 flex-1">
+              {start.final ? "Didn't start" : "Still not up"}
+            </span>
+            <Button
+              size="icon-xs"
+              variant="ghost"
+              title="Dismiss"
+              disabled={dismisser.pending}
+              onClick={() => dismisser.submit("start-dismiss")}
+            >
+              <X />
+            </Button>
+          </span>
+          <span className="sensitive break-words">{start.reason}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // Waiting shows no state here: the card already carries the prompt or tool
 // that is waiting, and done cards are over. Anything queued shows as +N, and
 // the line then opens the chat, where the queue is listed. A chat that fanned
@@ -1847,6 +1914,7 @@ function BoardColumn({
   column,
   cards,
   starting = [],
+  failedStarts = [],
   notices = [],
   now,
   className,
@@ -1855,6 +1923,7 @@ function BoardColumn({
   column: BoardColumnKey;
   cards: BoardCard[];
   starting?: Spawning[];
+  failedStarts?: FailedStart[];
   notices?: Board["attention"];
   now: number;
   className?: string;
@@ -1863,7 +1932,9 @@ function BoardColumn({
 }) {
   const label = columnLabel(column);
   const count =
-    column === "attention" ? notices.length : cards.length + starting.length;
+    column === "attention"
+      ? notices.length
+      : cards.length + starting.length + failedStarts.length;
   return (
     <section
       data-column={column}
@@ -1912,6 +1983,9 @@ function BoardColumn({
         <PinnedCards cards={cards} now={now} />
       ) : (
         <>
+          {failedStarts.map((f) => (
+            <FailedStartCard key={f.sessionId} start={f} />
+          ))}
           {starting.map((s) => (
             <StartingCard key={s.key} spawn={s} />
           ))}
@@ -2207,7 +2281,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   const notifications = useWaitingNotifications(board.cards);
   // Cards moved ahead of the poll by what was just sent, and chats still
   // starting.
-  const optimistic = useOptimisticBoard(board.cards);
+  const optimistic = useOptimisticBoard(board.cards, board.failedStarts);
   const { cards, starting } = optimistic;
   useDoneToasts(cards);
   useSendFailureToasts(cards);
@@ -2232,7 +2306,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     attention: attention.length,
     pinned: pinned.length,
     ...Object.fromEntries(COLUMNS.map((c) => [c, byColumn(c).length])),
-    working: byColumn("working").length + starting.length,
+    working:
+      byColumn("working").length + starting.length + board.failedStarts.length,
   } as Record<BoardColumnKey, number>;
   // Only what asks something of the user.
   const actions = attentionCount(attention);
@@ -2505,6 +2580,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                     column={column}
                     cards={byColumn(column)}
                     starting={column === "working" ? starting : []}
+                    failedStarts={
+                      column === "working" ? board.failedStarts : []
+                    }
                     now={now}
                     className={cn(!columns.includes(column) && "md:hidden")}
                   />

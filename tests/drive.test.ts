@@ -46,6 +46,12 @@ import {
   promptBoxDraft,
   type ReplayGrid,
 } from "~/lib/harness.server";
+import {
+  dismissStart,
+  failedStarts,
+  launchCommand,
+  STALLED_MS,
+} from "~/lib/launches.server";
 import { failureFor, recordFailure } from "~/lib/send-failures.server";
 import { FakeCmux, plainGrid, type FakeSurface } from "./fake-cmux";
 
@@ -1174,8 +1180,10 @@ describe("dispatch", () => {
       focus: false,
     });
     const command = String(create.params.initial_command);
-    // In the user's own interactive shell, so it gets their PATH.
-    expect(command).toMatch(/^exec '[^']+' -ic '/);
+    // In the user's own interactive shell, so it gets their PATH, under
+    // /bin/sh, which keeps the terminal open if it fails.
+    expect(command).toMatch(/^exec \/bin\/sh -c '/);
+    expect(command).toContain(`"$1" -ic "$2"`);
     expect(command).toContain("cmux-claude-wrapper");
     expect(command).toContain(`--session-id`);
     expect(command).toContain(sessionId);
@@ -1397,6 +1405,131 @@ describe("dispatch", () => {
     await vi.waitFor(() => expect(input(created)).toEqual(["key:enter"]), {
       timeout: 5_000,
     });
+  });
+});
+
+// An agent that dies while starting used to take its workspace with it,
+// and the board never heard: nothing listed it, and its placeholder card
+// went after a while with no word.
+describe("a launch that fails", () => {
+  const dir = () =>
+    realpathSync(mkdtempSync(join(tmpdir(), "seamux-failed-start-")));
+  const run = (command: string) =>
+    execFileSync(
+      "/bin/sh",
+      ["-c", launchCommand("/bin/sh", command, "Claude Code")],
+      {
+        input: "",
+        stdio: ["pipe", "pipe", "ignore"],
+      },
+    ).toString();
+
+  it("keeps the terminal open, saying how the agent exited", () => {
+    const out = run("echo it broke; exit 3");
+    expect(out).toContain("it broke");
+    expect(out).toMatch(
+      /seamux: Claude Code exited with status 3 after \d+s\./,
+    );
+    expect(out).toContain("This terminal stays open");
+  });
+
+  // A clean exit seconds in is a start that failed too: no one used it.
+  it("keeps it open for an exit too soon to be the user's, clean or not", () => {
+    expect(run("exit 0")).toContain("seamux: Claude Code exited with status 0");
+  });
+
+  const later = (ms: number) => Date.now() + ms;
+  const nothingListed = () => false;
+
+  it("reports a dispatched chat whose agent exited, until dismissed", async () => {
+    const sessionId = await dispatch({ cwd: dir(), prompt: "Hand it over" });
+    const created = cmux.workspaces.at(-1)!.surfaces[0];
+    // Too soon to tell.
+    expect(
+      (await failedStarts(nothingListed, later(5_000))).map((f) => f.sessionId),
+    ).not.toContain(sessionId);
+    created.screen =
+      "Error: something broke\n\nseamux: Claude Code exited with status 1 after 2s.\nThis terminal stays open to show what it printed.\n\n$ ";
+    const failed = (await failedStarts(nothingListed, later(11_000))).find(
+      (f) => f.sessionId === sessionId,
+    );
+    expect(failed).toMatchObject({
+      name: "hand-it-over",
+      intent: "Hand it over",
+      forked: false,
+      final: true,
+    });
+    expect(failed!.reason).toContain(
+      "Claude Code exited with status 1 after 2s.",
+    );
+    expect(failed!.reason).toContain("still open in cmux");
+    dismissStart(sessionId);
+    expect(
+      (await failedStarts(nothingListed, later(11_000))).map(
+        (f) => f.sessionId,
+      ),
+    ).not.toContain(sessionId);
+  });
+
+  it("reports one whose workspace closed", async () => {
+    const sessionId = await dispatch({ cwd: dir(), prompt: "Gone already" });
+    cmux.workspaces.pop();
+    const failed = (await failedStarts(nothingListed, later(11_000))).find(
+      (f) => f.sessionId === sessionId,
+    );
+    expect(failed).toMatchObject({ final: true });
+    expect(failed!.reason).toContain("workspace closed");
+    dismissStart(sessionId);
+  });
+
+  it("says when one is long overdue, and forgets it once the board lists it", async () => {
+    const sessionId = await dispatch({ cwd: dir(), prompt: "Slow start" });
+    const overdue = (
+      await failedStarts(nothingListed, later(STALLED_MS + 1_000))
+    ).find((f) => f.sessionId === sessionId);
+    expect(overdue).toMatchObject({ final: false });
+    expect(overdue!.reason).toContain("Not on the board");
+    const listed = (id: string) => id === sessionId;
+    expect(
+      (await failedStarts(listed, later(STALLED_MS + 2_000))).map(
+        (f) => f.sessionId,
+      ),
+    ).not.toContain(sessionId);
+    expect(
+      (await failedStarts(nothingListed, later(STALLED_MS + 3_000))).map(
+        (f) => f.sessionId,
+      ),
+    ).not.toContain(sessionId);
+  });
+
+  it("reports a fork that never came up, as a tangent", async () => {
+    const sessionId = await fork(
+      "parent-1",
+      dir(),
+      "Try the other way",
+      "claude",
+    );
+    cmux.workspaces.pop();
+    expect(
+      (await failedStarts(nothingListed, later(11_000))).find(
+        (f) => f.sessionId === sessionId,
+      ),
+    ).toMatchObject({ forked: true, intent: "Try the other way" });
+    dismissStart(sessionId);
+  });
+
+  // Codex picks its own id, so dispatching it waits for cmux to file one,
+  // and says why at once if the agent exited instead.
+  it("fails a Codex dispatch with how its agent exited", async () => {
+    const started = dispatch({ cwd: dir(), engine: "codex", prompt: "Hi" });
+    await vi.waitFor(() =>
+      expect(cmux.calls("workspace.create")).toHaveLength(1),
+    );
+    cmux.workspaces.at(-1)!.surfaces[0].screen =
+      "seamux: Codex exited with status 1 after 1s.\nThis terminal stays open to show what it printed.";
+    await expect(started).rejects.toThrow(
+      "Codex exited with status 1 after 1s. Its workspace is still open",
+    );
   });
 });
 

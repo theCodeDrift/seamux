@@ -56,7 +56,7 @@ Into a raw-mode reader, `terminal.paste` of `hello paste` arrived as `hello past
 
 ## A workspace closes itself when its `initial_command` exits
 
-A chat started by hand, though, leaves its shell prompt behind after `/exit`, so seamux closes its tab once the agent is gone.
+A chat started by hand, though, leaves its shell prompt behind after `/exit`, so seamux closes its tab once the agent is gone. So does one seamux started that failed, or was closed within seconds of starting: its launch command keeps the shell there to show how the agent exited ([launching.md](launching.md#claude-code-exits-0-when-the-user-quits-and-1-when-the-trust-dialog-is-refused)).
 
 - **Measured:** not recorded.
 - **In seamux:** `closeChat` in [drive.server.ts](../app/lib/drive.server.ts).

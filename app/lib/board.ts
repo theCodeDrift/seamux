@@ -253,6 +253,8 @@ export interface Board {
   // The commit the board is serving, so a landed change is visible.
   version: { hash: string; subject: string } | null;
   cards: Card[];
+  // Chats seamux started that never showed up, until dismissed.
+  failedStarts: FailedStart[];
   // Every fan-out still on the board; each is also on its parent's card.
   dispatches: DispatchSet[];
   // Background sessions not matched to an open chat. Every one `claude
@@ -354,6 +356,21 @@ export const DONE_VISIBLE_MS = 30 * 60 * 1000;
 // an empty prompt box. A reply that ended on a question puts the card in
 // WAITING, but the prompt box is free.
 // A message the board couldn't get into a chat, and why.
+// A chat seamux started that never showed up on the board: it exited while
+// starting, its workspace went, or it is taking far too long.
+export interface FailedStart {
+  sessionId: string;
+  engine: Engine;
+  name: string;
+  cwd: string;
+  intent: string;
+  forked: boolean;
+  reason: string;
+  // It exited, or its workspace went, so it won't show up now.
+  final: boolean;
+  at: number;
+}
+
 export interface SendFailure {
   text: string;
   error: string;

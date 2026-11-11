@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 
-import type { Card, Column } from "./board.ts";
+import type { Card, Column, FailedStart } from "./board.ts";
 import type { Engine } from "./config.ts";
 
 // A card moved by the board ahead of the poll that confirms it: a sent
@@ -40,8 +40,10 @@ export interface Spawning {
 }
 
 // Launching a session can take a while: a worktree, a cmux workspace, the
-// agent's own start-up.
-const SPAWN_MS = 90_000;
+// agent's own start-up. Longer than the server waits before it reports a
+// launch as stalled (STALLED_MS in launches.server.ts), so the card that
+// says so takes this one's place rather than following a gap.
+const SPAWN_MS = 120_000;
 
 interface Optimistic {
   expect: (sessionId: string, column: Column) => void;
@@ -104,8 +106,12 @@ function moved(card: Card, column: Column): Card {
 }
 
 // The board's cards with the moves it expects applied, and the chats still
-// starting.
-export function useOptimisticBoard(cards: Card[]) {
+// starting. A chat the server reports failed to start is no longer
+// starting: its failed card shows instead.
+export function useOptimisticBoard(
+  cards: Card[],
+  failedStarts: FailedStart[] = [],
+) {
   const [expects, setExpects] = useState<Record<string, Expected>>({});
   const [spawns, setSpawns] = useState<Spawning[]>([]);
   const counter = useRef(0);
@@ -120,17 +126,14 @@ export function useOptimisticBoard(cards: Card[]) {
       return rest;
     });
   }, []);
-  const spawn = useCallback(
-    (s: Omit<Spawning, "key" | "sessionId" | "at">) => {
-      const key = `spawn:${++counter.current}`;
-      setSpawns((list) => [
-        ...list,
-        { ...s, key, sessionId: null, at: Date.now() },
-      ]);
-      return key;
-    },
-    [],
-  );
+  const spawn = useCallback((s: Omit<Spawning, "key" | "sessionId" | "at">) => {
+    const key = `spawn:${++counter.current}`;
+    setSpawns((list) => [
+      ...list,
+      { ...s, key, sessionId: null, at: Date.now() },
+    ]);
+    return key;
+  }, []);
   const started = useCallback((key: string, sessionId: string | null) => {
     setSpawns((list) =>
       sessionId
@@ -148,9 +151,15 @@ export function useOptimisticBoard(cards: Card[]) {
     const now = Date.now();
     const byId = new Map(cards.map((c) => [c.sessionId, c]));
     const listed = spawns.flatMap((s) => listedAs(s, cards) ?? []);
+    const failed = new Set(failedStarts.map((f) => f.sessionId));
     const gone = new Set(
       spawns
-        .filter((s) => listedAs(s, cards) || now - s.at >= SPAWN_MS)
+        .filter(
+          (s) =>
+            listedAs(s, cards) ||
+            (s.sessionId && failed.has(s.sessionId)) ||
+            now - s.at >= SPAWN_MS,
+        )
         .map((s) => s.key),
     );
     setSpawns((list) => {
@@ -173,14 +182,17 @@ export function useOptimisticBoard(cards: Card[]) {
     });
     // Only on a new board: the spawns read here are the ones it answers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cards]);
+  }, [cards, failedStarts]);
 
   const now = Date.now();
   const shown = cards.map((card) => {
     const e = expects[card.sessionId];
     return e && holds(e, card, now) ? moved(card, e.column) : card;
   });
-  const starting = spawns.filter((s) => !listedAs(s, cards));
+  const failed = new Set(failedStarts.map((f) => f.sessionId));
+  const starting = spawns.filter(
+    (s) => !listedAs(s, cards) && !(s.sessionId && failed.has(s.sessionId)),
+  );
   const context = useMemo<Optimistic>(
     () => ({
       expect,

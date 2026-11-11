@@ -102,6 +102,7 @@ import {
   type PinRow,
   type SubagentRow,
 } from "./store.server";
+import { failedStarts } from "./launches.server";
 import { failureFor } from "./send-failures.server";
 import { memoryUsage } from "./memory.server";
 
@@ -1346,10 +1347,17 @@ export async function loadBoard(now = Date.now()): Promise<Board> {
       (d) => d.parentSessionId === card.sessionId,
     );
   }
+  const listed = new Set(cards.map((c) => c.sessionId));
   return {
     generatedAt: now,
     version: await servedVersion(),
     cards,
+    failedStarts: await failedStarts((id) => listed.has(id), now).catch(
+      (err) => {
+        warnings.push(`Launches unchecked: ${(err as Error).message}`);
+        return [];
+      },
+    ),
     dispatches,
     orphans,
     attention: await serviceNotices(cards, now).catch((err) => {

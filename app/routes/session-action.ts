@@ -24,6 +24,7 @@ import {
   UnsentError,
 } from "~/lib/drive.server";
 import { assertFromBoard, SESSION_ID } from "~/lib/guard.server";
+import { dismissStart } from "~/lib/launches.server";
 import { startQueue } from "~/lib/queue.server";
 import { clearFailure } from "~/lib/send-failures.server";
 import { sendOrSignIn } from "~/lib/service.server";
@@ -64,6 +65,7 @@ const INTENTS = new Set([
   "draft-send",
   "draft-take",
   "send-failure-dismiss",
+  "start-dismiss",
 ]);
 const MAX_MESSAGE = 100_000;
 
@@ -171,6 +173,8 @@ async function perform(
     await takeDraft(sessionId, messageText(form));
   } else if (intent === "send-failure-dismiss") {
     clearFailure(sessionId);
+  } else if (intent === "start-dismiss") {
+    dismissStart(sessionId);
   } else if (intent === "queue-drop") {
     takeQueued(queuedId(form), sessionId);
   } else if (intent === "close") {

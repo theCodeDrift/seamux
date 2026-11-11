@@ -47,6 +47,7 @@ import {
 import * as macros from "./macros.server.ts";
 import { projectOf } from "./project-colors.ts";
 import type { Alive } from "./protocol.server.ts";
+import { exitedOn, launchCommand, trackLaunch } from "./launches.server.ts";
 import { clearFailure, recordFailure } from "./send-failures.server.ts";
 import { recordDispatch } from "./store.server.ts";
 
@@ -235,10 +236,12 @@ export async function listLive(
       if (filed?.surface_id === surface.surfaceId) {
         unfiled.delete(id);
       } else if (
-        !workspaces.some((w) => w.id === surface.workspaceId) &&
-        now - launchedAt > LISTED_GRACE_MS
+        now - launchedAt > LISTED_GRACE_MS &&
+        (!workspaces.some((w) => w.id === surface.workspaceId) ||
+          (await exitedOn(surface)))
       ) {
-        // Exited before its first prompt: its workspace closed with it.
+        // Exited before its first prompt: its workspace closed, or the
+        // launch command kept it open to show why.
         unfiled.delete(id);
         map.delete(id);
       } else {
@@ -911,13 +914,16 @@ async function launch(
     {
       cwd,
       title,
-      initial_command: `exec ${shq(SHELL)} -ic ${shq(
+      // Kept open when the agent fails, to show why (launches.server.ts).
+      initial_command: launchCommand(
+        SHELL,
         [
           `PATH=${BIN_DIRS.map(shq).join(":")}:"$PATH"`,
           shq(harness.wrapper ?? harness.bin),
           ...args.map(shq),
         ].join(" "),
-      )}`,
+        ENGINE_LABELS[engine],
+      ),
       focus,
     },
   );
@@ -940,6 +946,12 @@ async function sessionIn(engine: Engine, surface: Surface): Promise<string> {
   const deadline = Date.now() + FILED_MS;
   while (Date.now() < deadline) {
     await pause(1000);
+    const exited = await exitedOn(surface);
+    if (exited) {
+      throw new Error(
+        `${exited.replace(/^seamux: /, "")} Its workspace is still open in cmux with what it printed.`,
+      );
+    }
     for (const [id, live] of await listLive()) {
       if (
         live.engine === engine &&
@@ -1540,6 +1552,15 @@ export async function dispatch(input: DispatchInput): Promise<string> {
     [...identify(sessionId, name), first],
     false,
   );
+  trackLaunch({
+    sessionId,
+    engine,
+    surface,
+    name,
+    cwd: where,
+    intent: prompt,
+    forked: false,
+  });
   if (HARNESSES[engine].filedOnPrompt)
     unfiled.set(sessionId, { engine, surface, launchedAt: Date.now() });
   return sessionId;
@@ -1582,7 +1603,7 @@ export async function fork(
     dispatch_id: null,
     worker: null,
   });
-  await launch(
+  const surface = await launch(
     engine,
     where,
     name,
@@ -1592,5 +1613,14 @@ export async function fork(
     ],
     false,
   );
+  trackLaunch({
+    sessionId,
+    engine,
+    surface,
+    name,
+    cwd: where,
+    intent: text,
+    forked: true,
+  });
   return sessionId;
 }
