@@ -382,6 +382,13 @@ export function atRest(card: Card): boolean {
   return card.column === "idle" || card.waiting?.reason === ASKED_IN_REPLY;
 }
 
+// Whether the chat's own prompt box takes a message now: at rest, or WORKING
+// only because subagents run while its own turn has ended. Claude Code takes
+// a prompt then, and the subagents' hand-backs queue behind it.
+export function takesInput(card: Card): boolean {
+  return atRest(card) || (card.column === "working" && !card.turnRunning);
+}
+
 // Whether /exit is safe.
 export function closable(card: Card): boolean {
   return atRest(card);

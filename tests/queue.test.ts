@@ -6,10 +6,15 @@ import { expect, it } from "vitest";
 import { ASKED_IN_REPLY, type Card, type Waiting } from "~/lib/board";
 import { ready } from "~/lib/queue.server";
 
-function card(column: Card["column"], waiting: Waiting | null = null): Card {
+function card(
+  column: Card["column"],
+  waiting: Waiting | null = null,
+  turnRunning = column === "working",
+): Card {
   return {
     sessionId: "3f0e8c1a-5b2d-4c3e-9f41-2a7d6b8e0c15",
     column,
+    turnRunning,
     drivable: true,
     closing: null,
     waiting,
@@ -36,4 +41,8 @@ it("holds while a dialog is open or the chat works", () => {
   expect(ready(card("waiting", waitingOn("permission prompt", "Bash")), now)).toBe(false);
   expect(ready(card("waiting", waitingOn("input needed", "AskUserQuestion")), now)).toBe(false);
   expect(ready(card("working"), now)).toBe(false);
+});
+
+it("sends into a chat whose own turn ended while its subagents run", () => {
+  expect(ready(card("working", null, false), Date.now())).toBe(true);
 });

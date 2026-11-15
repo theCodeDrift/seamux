@@ -516,7 +516,10 @@ function ChatInput({
     forker.submit("fork", worktree ? { text, worktree: "on" } : { text });
   };
   const canSend = card.drivable && !pending && outgoing.trim().length > 0;
-  const queueing = card.column === "working" || card.boardQueue.length > 0;
+  // Only its subagents running, the chat takes a message now.
+  const queueing =
+    (card.column === "working" && card.turnRunning) ||
+    card.boardQueue.length > 0;
   const asking = card.waiting?.ask != null;
   const send = () =>
     canSend &&

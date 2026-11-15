@@ -1,10 +1,11 @@
 // Sends seamux's queued messages. A message written while a chat works is
 // held in the store rather than pasted into Claude Code's own queue, so it
 // can be edited or removed until it goes. This loop sends the oldest one
-// once the chat is at rest, one per turn: idle, or waiting only because its
-// reply ended on a question, which the next message may well answer.
+// once the chat takes input, one per turn: idle, waiting only because its
+// reply ended on a question, which the next message may well answer, or
+// working only on subagents while its own turn has ended.
 
-import { atRest, type Card } from "./board.ts";
+import { takesInput, type Card } from "./board.ts";
 import { loadBoard } from "./board.server";
 import { UnsentError } from "./drive.server";
 import { sendOrSignIn } from "./service.server";
@@ -63,7 +64,7 @@ async function tick() {
 
 export function ready(card: Card, now: number): boolean {
   const sent = state.sent.get(card.sessionId);
-  const rest = atRest(card);
+  const rest = takesInput(card);
   if (sent && !rest) sent.seenBusy = true;
   if (!rest || !card.drivable || card.closing) return false;
   if (!sent || sent.seenBusy) return true;
