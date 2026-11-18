@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react";
 
 import { Button } from "~/components/ui/button";
 import type { CmuxProblem as Problem } from "~/lib/board";
+import { copyText } from "~/lib/clipboard";
 
 // Covers the board while seamux can't reach cmux: every chat would show, and
 // every send would fail, so it says why and how to fix it instead. It goes
@@ -143,7 +144,8 @@ function Command({ text }: { text: string }) {
         variant="ghost"
         title="Copy"
         onClick={() => {
-          void navigator.clipboard?.writeText(text).then(() => {
+          void copyText(text).then((ok) => {
+            if (!ok) return;
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           });

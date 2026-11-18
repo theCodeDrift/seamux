@@ -12,6 +12,7 @@ import {
   remarkFilePaths,
 } from "~/lib/files";
 import { remarkFrontmatterAsCode } from "~/lib/highlight";
+import { copyText } from "~/lib/clipboard";
 import { cn } from "~/lib/utils";
 
 // Claude's replies, as the markdown they're written in. Links open in a new
@@ -52,9 +53,7 @@ export const Markdown = memo(
         // often wrong on short snippets.
         rehypePlugins={[[rehypeHighlight, { detect: false }]]}
         // The default drops `style.css:12` as an unknown scheme.
-        urlTransform={(url) =>
-          resolve(url) ? url : defaultUrlTransform(url)
-        }
+        urlTransform={(url) => (resolve(url) ? url : defaultUrlTransform(url))}
         components={{
           a: ({ node: _node, href, ...props }) => {
             const path = href ? resolve(href) : null;
@@ -111,7 +110,8 @@ function CodeBlock({ className, ...props }: ComponentProps<"pre">) {
         onClick={(e) => {
           e.stopPropagation();
           const text = pre.current?.textContent ?? "";
-          void navigator.clipboard?.writeText(text).then(() => {
+          void copyText(text).then((ok) => {
+            if (!ok) return;
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           });
