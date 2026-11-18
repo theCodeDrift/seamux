@@ -19,8 +19,8 @@
 //
 // It also runs the Cloudflare tunnel while the board's Remote switches are on
 // (app/lib/remote.server.ts), restarting it with the same backoff when it exits,
-// and stops it when a switch goes off or its settings go missing. When mDNS
-// is switched on or off, it restarts the board server, which picks the address
+// and stops it when a switch goes off or its settings go missing. When LAN
+// access is switched on or off, it restarts the board server, which picks the address
 // it listens on at startup.
 //
 // The port comes from SEAMUX_PORT, else .seamux.json, else 54321, and is
@@ -397,7 +397,9 @@ async function supervise() {
       restartStamp = stamp;
       void restart("requested");
     } else if (child && lanWanted(REPO) !== listeningLan) {
-      void restart(listeningLan ? "mDNS switched off" : "mDNS switched on");
+      void restart(
+        listeningLan ? "LAN access switched off" : "LAN access switched on",
+      );
     }
     void reconcileTunnel();
   }, 1000);

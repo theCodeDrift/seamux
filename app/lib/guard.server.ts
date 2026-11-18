@@ -16,14 +16,15 @@ function isTunnelRequest(request: Request): boolean {
   return isTunnelHost(SEAMUX_HOME, request.headers.get("host"));
 }
 
-// This Mac's .local name while mDNS is on. HTTP Basic has already let it in.
+// This Mac's .local name or network address while LAN access is on. HTTP
+// Basic has already let it in.
 function isLanRequest(request: Request): boolean {
   return isLanHost(SEAMUX_HOME, request.headers.get("host"));
 }
 
 // The board's actions spawn sessions and type into them. A browser lets any
 // website POST a form to 127.0.0.1, so only accept requests the board itself
-// made: the Host must be local, the tunnel's or the mDNS name (no DNS
+// made: the Host must be local, the tunnel's or a LAN one (no DNS
 // rebinding) and the Origin must match it.
 export function assertFromBoard(request: Request) {
   const host = request.headers.get("host") ?? "";

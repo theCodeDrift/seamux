@@ -2468,7 +2468,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   <a
                     href={remote.mdns.url}
                     className="flex shrink-0 items-center gap-1 text-xs text-foreground"
-                    title={`mDNS is on: the board answers the network at ${remote.mdns.url}`}
+                    title={`LAN access is on: the board answers the network at ${remote.mdns.url}`}
                   >
                     <Wifi className="size-3.5" />
                     LAN

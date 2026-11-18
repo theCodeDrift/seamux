@@ -26,7 +26,8 @@ const swapSchema = z.strictObject({
 });
 
 export async function action({ request }: Route.ActionArgs) {
-  // On this Mac, or this Mac's .local name; never through the tunnel.
+  // On this Mac, or a LAN name while LAN access is on; never through the
+  // tunnel.
   const host = request.headers.get("host");
   if (!isLocalRequest(request) && !isLanHost(SEAMUX_HOME, host)) {
     throw data(null, { status: 403 });

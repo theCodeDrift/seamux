@@ -38,7 +38,7 @@ A clone keeps its settings and state in the clone itself, all gitignored. `npm s
 
 Run the board in its own cmux workspace. Started from any other terminal it can list your chats but not send them anything, since cmux only lets programs started inside it type into its terminals, unless its Settings, under Automation, set Socket Control Mode to Automation mode; the board then covers itself with what's wrong and how to fix it. It supervises the server: it restarts it if it exits or stops answering, and refuses to run twice.
 
-When the board's page loads but none of its buttons work, its scripts never started in that browser. After ten seconds the page then shows **Buttons not working? Restart the board** at the bottom, a link to `/restart`. That page asks the supervisor to restart the board's server, clears the browser's cache for the board, and goes back to the board once the new server answers. Sessions keep running. It works from a phone over mDNS or the tunnel, as long as the browser is signed in to the board, and the error page links to it too.
+When the board's page loads but none of its buttons work, its scripts never started in that browser. After ten seconds the page then shows **Buttons not working? Restart the board** at the bottom, a link to `/restart`. That page asks the supervisor to restart the board's server, clears the browser's cache for the board, and goes back to the board once the new server answers. Sessions keep running. It works from a phone over LAN access or the tunnel, as long as the browser is signed in to the board, and the error page links to it too.
 
 The same command is `bin/seamux`, the package's `seamux` bin: in a clone, run `npm link` once and `seamux` starts the board from anywhere. With a command, such as `seamux list`, it's the fan-out CLI the README describes.
 
@@ -66,7 +66,7 @@ SEAMUX_USER=you
 SEAMUX_PASS=something-long
 ```
 
-It reads them on every request, so a change to `.env` takes effect without a restart. Set, they're asked for by every request, from this Mac too, and for every file the board serves; only a request through the Cloudflare tunnel skips them, since Cloudflare Access logs it in. With either one unset the board answers only this Mac, and mDNS won't turn on.
+It reads them on every request, so a change to `.env` takes effect without a restart. Set, they're asked for by every request, from this Mac too, and for every file the board serves; only a request through the Cloudflare tunnel skips them, since Cloudflare Access logs it in. With either one unset the board answers only this Mac, and LAN access won't turn on.
 
 ## Settings
 
@@ -121,7 +121,7 @@ A theme repaints the board, on every browser that has it open. Pick one from the
 - **Export**, under the `⋯`, saves a theme as `<name>.seamux-theme.json` to share. **Import**, below the list, opens one as a new theme for you to look over and save; tokens this seamux doesn't know, from a newer one, are left out and listed. A theme file is the theme's name, label and variants under `"seamux-theme": 1`.
 - While you edit a theme, this browser shows the draft before you save it, in light or dark as the editor's tab says. **Revert** puts back what's saved.
 
-**Allow POST /theme/set**, the switch below the editor, lets a script switch every board's theme, and light or dark with it. It can only be turned on from this Mac, and turns off from anywhere. It answers a JSON POST, never a GET or a form, from this Mac or over mDNS, with the board's user and password like every request whenever they're set, never through the tunnel, and never from another website: a POST that carries an `Origin` other than the board's own is refused, which a script never sends:
+**Allow POST /theme/set**, the switch below the editor, lets a script switch every board's theme, and light or dark with it. It can only be turned on from this Mac, and turns off from anywhere. It answers a JSON POST, never a GET or a form, from this Mac or over LAN access, with the board's user and password like every request whenever they're set, never through the tunnel, and never from another website: a POST that carries an `Origin` other than the board's own is refused, which a script never sends:
 
 ```sh
 curl -u "$SEAMUX_USER:$SEAMUX_PASS" -X POST -H 'content-type: application/json' \
@@ -130,13 +130,13 @@ curl -u "$SEAMUX_USER:$SEAMUX_PASS" -X POST -H 'content-type: application/json' 
 
 **Terminal font**, below the editor, sets the font for the [terminal](../README.md#terminal), its screen, type box and keys, as a CSS font family such as `MesloLGS NF`. Each device uses it only if it has the font installed, so a phone without it shows the board's own mono font, and glyphs only that font draws, such as a Nerd Font prompt's icons, show as boxes there. It applies under every theme.
 
-Over mDNS, use `http://<name>.local:54321/theme/set`.
+Over LAN access, use `http://<name>.local:54321/theme/set`, or the same at this Mac's IP address.
 
 `name` is a saved theme, or `seamux`. `color`, `light` or `dark`, is optional: with it, every browser switches to it, including one opened later, until that browser's own toggle switches it back; without it, each browser keeps its own. It answers 204; 400 for any other body, 403 with the switch off or from another website, 404 for a theme that doesn't exist, 415 for anything but JSON. The newest swap wins: every board takes whichever was made last.
 
 ### Remote
 
-Switches on remote connections: mDNS for your own network, and a Cloudflare tunnel for anywhere else. See [Remote connections](remote-connections.md).
+Switches on remote connections: LAN access for your own network, and a Cloudflare tunnel for anywhere else. See [Remote connections](remote-connections.md).
 
 ### Debug
 
@@ -158,7 +158,7 @@ Some choices are kept in the browser rather than the store: light or dark (the b
 { "port": 54321 }
 ```
 
-Edit the port there, or start the board once with `SEAMUX_PORT` set, and it's kept for later runs. The Remote tab's switches are kept here too, as `remote`, `mdns` and `tunnel`.
+Edit the port there, or start the board once with `SEAMUX_PORT` set, and it's kept for later runs. The Remote tab's switches are kept here too, as `remote`, `mdns` (LAN access) and `tunnel`.
 
 ## Environment variables
 
@@ -167,7 +167,7 @@ All optional. Each can go in `.env` or the environment, except `SEAMUX_HOME`, wh
 | Variable                                                                 | Default                                                          | Meaning                                                                                                                                                      |
 | ------------------------------------------------------------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `SEAMUX_PORT`                                                            | from `.seamux.json`                                              | Port for the board, saved to `.seamux.json`                                                                                                                  |
-| `SEAMUX_USER`, `SEAMUX_PASS`                                             | unset                                                            | HTTP Basic credentials for the board, asked for by every request except the tunnel's. Unset leaves the board open to this Mac only, and keeps mDNS off       |
+| `SEAMUX_USER`, `SEAMUX_PASS`                                             | unset                                                            | HTTP Basic credentials for the board, asked for by every request except the tunnel's. Unset leaves the board open to this Mac only, and keeps LAN access off |
 | `SEAMUX_CF_TOKEN`, `SEAMUX_CF_DOMAIN`, `SEAMUX_CF_TEAM`, `SEAMUX_CF_AUD` | unset                                                            | The Cloudflare tunnel's token and hostname, and the Cloudflare Access team and AUD tag. All four are needed. See [Remote connections](remote-connections.md) |
 | `SEAMUX_CF_TUNNEL`                                                       | unset                                                            | The tunnel's id, shown in the Remote tab                                                                                                                     |
 | `SEAMUX_HOME`                                                            | the clone, or `~/.seamux`                                        | Where seamux keeps `.env`, `.seamux.json` and `data/`                                                                                                        |

@@ -118,9 +118,9 @@ function replayLandings(): Plugin {
 // Before React Router loads .env again, so a variable deleted from it goes.
 forgetDotenv();
 
-// The tunnel's hostname and whether mDNS is on, read once at startup:
+// The tunnel's hostname and whether LAN access is on, read once at startup:
 // changing either needs the dev server restarted, which the supervisor does
-// for mDNS.
+// for LAN access.
 const domain = remoteDomain(SEAMUX_HOME);
 const lan = lanWanted(SEAMUX_HOME);
 // The board's loaders run in this process, and tell the Remote tab.
@@ -135,10 +135,12 @@ export default defineConfig({
     tailwindcss(),
     reactRouter(),
   ],
-  // Bound to localhost only, unless mDNS is on: this server spawns processes
+  // Bound to localhost only, unless LAN access is on: this server spawns processes
   // and reads every transcript. The Cloudflare tunnel connects from this Mac.
   server: {
     host: lan ? true : "127.0.0.1",
+    // Vite lets any IP address through without being told, so this Mac's
+    // network addresses need no entry (knowledge/mdns.md).
     allowedHosts: [...(domain ? [domain] : []), ...(lan ? [lanHost()] : [])],
     port: 54321,
     strictPort: true,

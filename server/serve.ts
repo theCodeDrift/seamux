@@ -6,9 +6,9 @@
 // It serves what `npm run build` made, behind the same checks the dev server
 // makes: the remote-access gate, ahead of the static files and the board
 // alike. Like the
-// dev server, it binds 127.0.0.1 unless mDNS is on, and reads the tunnel's
-// hostname and the mDNS switch once, at startup; the supervisor restarts it
-// when mDNS changes.
+// dev server, it binds 127.0.0.1 unless LAN access is on, and reads the
+// tunnel's hostname and the LAN access switch once, at startup; the
+// supervisor restarts it when LAN access changes.
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";

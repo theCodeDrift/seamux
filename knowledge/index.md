@@ -24,7 +24,7 @@ Read the domain before you touch the code that leans on it. When a tool surprise
 | [OpenCode](opencode.md)                           | Measured before its engine: how cmux registers it, its SQLite sessions and subagents, its HTTP server, and how it compares with Claude Code and Codex |
 | [Signing in](signing-in.md)                       | Detecting an expired login and signing Claude Code or Codex in without a terminal                                                                     |
 | [Cloudflare Tunnel](cloudflare-tunnel.md)         | cloudflared, its hostname, and Cloudflare Access                                                                                                      |
-| [mDNS](mdns.md)                                   | Reaching the board by this Mac's `.local` name                                                                                                        |
+| [mDNS](mdns.md)                                   | Reaching the board by this Mac's `.local` name or IP                                                                                                  |
 | [Memory pressure](memory-pressure.md)             | How macOS reports a Mac short of memory, and why free memory isn't the measure                                                                        |
 | [git](git.md)                                     | Making a dispatched worktree: fetching the remote's default branch, and branching from it without tracking it                                         |
 | [Vite and React Router](vite-and-react-router.md) | The dev server, `.env`, cross-origin actions, and what browsers cache                                                                                 |

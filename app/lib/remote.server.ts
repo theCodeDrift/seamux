@@ -2,13 +2,14 @@
 // 127.0.0.1 or [::1], and binds 127.0.0.1 for nothing else. The Remote tab
 // opens two more ways in, each on its own switch, either or both:
 //
-// - mDNS: it listens on every interface and also answers this Mac's Bonjour
-//   name, <LocalHostName>.local, from anywhere. That needs the HTTP Basic
-//   credentials set.
+// - LAN access (`mdns` in .seamux.json, its name before it took addresses
+//   too): it listens on every interface and also answers this Mac's Bonjour
+//   name, <LocalHostName>.local, and its own network addresses, from
+//   anywhere. That needs the HTTP Basic credentials set.
 // - the tunnel: a Cloudflare named tunnel from SEAMUX_CF_DOMAIN to the board,
 //   with Cloudflare Access in front of it. The board also answers cloudflared,
 //   on this Mac, at the tunnel's hostname, and only from loopback, even while
-//   mDNS has it listening on the network. A request there must carry a valid
+//   LAN access has it listening on the network. A request there must carry a valid
 //   Access token for SEAMUX_CF_TEAM and SEAMUX_CF_AUD, checked here, and then
 //   needs no HTTP Basic credentials. If the Access application is ever
 //   deleted or loosened, the board still refuses.
@@ -18,7 +19,7 @@
 //
 // The switches live in .seamux.json. The supervisor (scripts/supervise.ts)
 // starts and stops cloudflared to match, and restarts the dev server when
-// mDNS changes, since vite.config.ts picks the address it listens on once.
+// LAN access changes, since vite.config.ts picks the address it listens on once.
 //
 // scripts/supervise.ts, vite.config.ts and the compiled server
 // (server/serve.ts) import this under plain Node, so it uses node: builtins
@@ -33,7 +34,7 @@ import {
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { hostname } from "node:os";
+import { hostname, networkInterfaces } from "node:os";
 import { join } from "node:path";
 
 import {
@@ -77,6 +78,9 @@ export interface RemoteStatus {
     wanted: boolean;
     // e.g. http://my-mac.local:54321
     url: string;
+    // The same board at each of this Mac's network addresses, e.g.
+    // http://192.168.1.20:54321, as they stand now.
+    addresses: string[];
     // Whether the running dev server listens beyond loopback.
     listening: boolean;
     // Whether SEAMUX_USER and SEAMUX_PASS are set; it won't turn on without.
@@ -225,8 +229,36 @@ export function lanHost(): string {
   return lanName;
 }
 
+// This Mac's own addresses on the networks it has joined, as a Host names
+// them: IPv4 as is, IPv6 in brackets. Read on every call, since they change
+// with DHCP and every network joined. Loopback is local, not LAN, and an
+// IPv6 link-local address needs a zone a Host can't carry.
+export function lanAddresses(): string[] {
+  const addresses: string[] = [];
+  for (const entries of Object.values(networkInterfaces())) {
+    for (const entry of entries ?? []) {
+      if (entry.internal) continue;
+      if (entry.family === "IPv4") addresses.push(entry.address);
+      else if (!/^fe[89ab]/i.test(entry.address)) {
+        addresses.push(`[${entry.address.toLowerCase()}]`);
+      }
+    }
+  }
+  // IPv4 first: the one to type into a phone.
+  return [...new Set(addresses)].sort(
+    (a, b) => Number(a.startsWith("[")) - Number(b.startsWith("[")),
+  );
+}
+
+// The .local name or one of this Mac's network addresses. Vite lets any IP
+// address through its allowedHosts (knowledge/mdns.md), so only seamux's
+// own checks decide those.
+function isLanName(name: string): boolean {
+  return name === lanHost() || lanAddresses().includes(name);
+}
+
 export function isLanHost(dir: string, host: string | null): boolean {
-  return host !== null && lanWanted(dir) && hostOf(host) === lanHost();
+  return host !== null && lanWanted(dir) && isLanName(hostOf(host));
 }
 
 // Set by vite.config.ts in the dev server's own process, which is where the
@@ -275,11 +307,12 @@ export function checkRequest(
   if (!loopback && !lan) {
     return {
       verdict: "denied",
-      reason: "it came from the network, and mDNS is off in the Remote tab",
+      reason:
+        "it came from the network, and LAN access is off in the Remote tab",
     };
   }
   if (domain !== null && name === domain) {
-    // cloudflared connects from this Mac. With mDNS on the network can reach
+    // cloudflared connects from this Mac. With LAN access on the network can reach
     // the board too, and must not pass as cloudflared by naming the tunnel.
     if (!loopback) {
       return {
@@ -289,12 +322,12 @@ export function checkRequest(
     }
     return { verdict: "tunnel" };
   }
-  const answered =
-    (loopback && isLocalName(host)) || (lan && name === lanHost());
+  const viaLan = lan && name !== null && isLanName(name);
+  const answered = (loopback && isLocalName(host)) || viaLan;
   if (!answered) {
     const names = [
       ...(loopback ? LOCAL_NAMES : []),
-      ...(lan ? [lanHost()] : []),
+      ...(lan ? [lanHost(), ...lanAddresses()] : []),
       ...(domain !== null && loopback ? [domain] : []),
     ];
     return {
@@ -304,7 +337,7 @@ export function checkRequest(
   }
   const credentials = readCredentials(dir);
   if (!credentials) {
-    if (!lan || name !== lanHost()) return { verdict: "allowed" };
+    if (!viaLan) return { verdict: "allowed" };
     return {
       verdict: "denied",
       reason:
@@ -348,6 +381,7 @@ export function remoteStatus(dir: string, host: string | null): RemoteStatus {
     mdns: {
       wanted: switches.mdns,
       url: `http://${lanHost()}:${runPort(dir)}`,
+      addresses: lanAddresses().map((a) => `http://${a}:${runPort(dir)}`),
       listening: process.env[LISTEN_ENV] === "lan",
       secured: readCredentials(dir) !== null,
       viaLan: isLanHost(dir, host),

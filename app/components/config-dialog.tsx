@@ -663,8 +663,8 @@ function ThemeSetSetting({
         }
         label="Allow POST /theme/set"
       >
-        From this Mac or over mDNS, never the tunnel. Turns on only from this
-        Mac.
+        From this Mac or over LAN access, never the tunnel. Turns on only from
+        this Mac.
       </SwitchRow>
       {swap.on && (
         <pre className="overflow-x-auto rounded-md border bg-muted/50 px-2 py-1 font-mono text-[11px]">
@@ -872,8 +872,8 @@ function RemoteTab({ remote }: { remote: RemoteStatus }) {
           }
           label="Enable remote connections"
         >
-          Lets other devices reach the board, over your network with mDNS or
-          from anywhere through a Cloudflare tunnel, or both. Off, or with
+          Lets other devices reach the board, over your network with LAN access
+          or from anywhere through a Cloudflare tunnel, or both. Off, or with
           neither on, it answers only this Mac, at localhost, 127.0.0.1 or
           [::1]. It can only be turned on from this Mac, and turns off from
           anywhere.
@@ -884,7 +884,7 @@ function RemoteTab({ remote }: { remote: RemoteStatus }) {
       </section>
       {remote.enabled && (
         <>
-          <MdnsSetting remote={remote} local={local} />
+          <LanSetting remote={remote} local={local} />
           <TunnelSetting remote={remote} local={local} />
         </>
       )}
@@ -892,7 +892,7 @@ function RemoteTab({ remote }: { remote: RemoteStatus }) {
   );
 }
 
-function MdnsSetting({
+function LanSetting({
   remote,
   local,
 }: {
@@ -900,7 +900,9 @@ function MdnsSetting({
   local: boolean;
 }) {
   const action = useConfigAction(({ on }) =>
-    on === "true" ? toast.success("mDNS enabled") : toast("mDNS disabled"),
+    on === "true"
+      ? toast.success("LAN access enabled")
+      : toast("LAN access disabled"),
   );
   const { mdns } = remote;
   const host = new URL(mdns.url).hostname;
@@ -914,26 +916,38 @@ function MdnsSetting({
   else state = "On, but the board needs restarting to listen on the network.";
   return (
     <section className="flex flex-col gap-2">
-      <h3 className="font-medium">mDNS</h3>
+      <h3 className="font-medium">LAN access</h3>
       <SwitchRow
         checked={mdns.wanted}
         disabled={(!mdns.wanted && (!local || !mdns.secured)) || action.pending}
         onCheckedChange={(checked) =>
           action.submit("mdns", { on: String(checked) })
         }
-        label="Enable mDNS"
+        label="Enable LAN access"
       >
-        This Mac is reachable at{" "}
+        Answers other devices on your network at this Mac's mDNS name,{" "}
         <a href={mdns.url} className="font-mono text-xs underline">
           {host}
         </a>
-        . Turning this on lets the board accept more than the 127.0.0.1
+        , and at its network addresses, for a device that can't resolve .local
+        names. Turning this on lets the board accept more than the 127.0.0.1
         loopback: it listens on every network this Mac joins, and restarts to do
         so. Every request is asked for SEAMUX_USER and SEAMUX_PASS, which plain
         HTTP sends unencrypted, so use it on networks you trust. {state}
         {mdns.viaLan &&
           " You're viewing this over the network, so turning it off disconnects this page."}
       </SwitchRow>
+      {mdns.wanted && mdns.addresses.length > 0 && (
+        <ul className="flex flex-col gap-0.5 font-mono text-xs">
+          {mdns.addresses.map((address) => (
+            <li key={address}>
+              <a href={address} className="sensitive underline">
+                {address}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
       {action.error && <p className="text-destructive">{action.error}</p>}
     </section>
   );
@@ -978,7 +992,7 @@ function TunnelSetting({
           of its own: it checks every request's Access token instead, and
           refuses any request without a valid one, so it stays shut even if the
           Access application is removed. The tunnel's hostname is answered only
-          for cloudflared, on this Mac, even with mDNS on.
+          for cloudflared, on this Mac, even with LAN access on.
         </p>
         <SwitchRow
           checked={remote.wanted}

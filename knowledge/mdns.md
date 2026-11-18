@@ -1,8 +1,8 @@
 # mDNS
 
-Reaching the board on the local network by this Mac's `.local` name, behind the board's HTTP Basic credentials. Measured on macOS 26.5.1 with Vite 8.3.0 and React Router 7.18.4. [docs/remote-connections.md](../docs/remote-connections.md) is the setup guide.
+Reaching the board on the local network by this Mac's `.local` name or IP address (LAN access), behind the board's HTTP Basic credentials. Measured on macOS 26.5.1 with Vite 8.3.0 and React Router 7.18.4. [docs/remote-connections.md](../docs/remote-connections.md) is the setup guide.
 
-In seamux: `lanHost`, `isLanHost`, `isLoopback` and `remoteGate` in [remote.server.ts](../app/lib/remote.server.ts). What the dev server does along the way is in [Vite and React Router](vite-and-react-router.md), including [Safari's cache](vite-and-react-router.md#vite-serves-its-pre-bundled-dependencies-as-immutable), which a phone on the network found first.
+In seamux: `lanHost`, `lanAddresses`, `isLanHost`, `isLoopback` and `remoteGate` in [remote.server.ts](../app/lib/remote.server.ts). What the dev server does along the way is in [Vite and React Router](vite-and-react-router.md), including [Safari's cache](vite-and-react-router.md#vite-serves-its-pre-bundled-dependencies-as-immutable), which a phone on the network found first.
 
 ## `scutil --get LocalHostName` is the name Bonjour answers for
 
@@ -24,6 +24,13 @@ An IPv4 peer shows up as `::ffff:192.168.1.151`, and IPv4 loopback as `::ffff:12
 
 - **Measured:** macOS 26.5.1, Vite 8.3.0.
 - **In seamux:** `isLoopback` in [remote.server.ts](../app/lib/remote.server.ts).
+
+## Vite lets any IP address through `allowedHosts`, whatever it lists
+
+A dev server with `allowedHosts: []` answered `Host: 192.168.1.5:54999` and `Host: [2001:db8::1]:54999` with 200, and `Host: evil.example:54999` and `Host: osmium.local:54999` with 403. `isHostAllowed` returns true for any IPv4 or IPv6 Host before it reads the list, so reaching the board at this Mac's own address takes nothing from Vite, and only seamux's gate decides it. Node's `fetch` drops a `Host` it's given and sends the URL's, so test this with `curl -H 'Host: …'`.
+
+- **Measured:** Vite 8.3.0, Node 24, macOS 26.5.1.
+- **In seamux:** `lanAddresses` and `checkRequest` in [remote.server.ts](../app/lib/remote.server.ts); [vite.config.ts](../vite.config.ts) lists only the `.local` name.
 
 ## Vite refuses a `.local` name sent in capitals, before any plugin sees the request
 

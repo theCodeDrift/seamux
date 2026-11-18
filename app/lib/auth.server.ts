@@ -20,7 +20,7 @@ import { SEAMUX_HOME } from "~/lib/paths.server";
 // Through the tunnel, Cloudflare Access is the login: the request must carry
 // a valid Access token, and HTTP Basic isn't asked for. Otherwise HTTP Basic,
 // when credentials are configured. Without them it lets everything through,
-// since remoteGate only lets this Mac in then, except at the mDNS name,
+// since remoteGate only lets this Mac in then, except at a LAN name,
 // which never answers without them.
 export const requireAuth: MiddlewareFunction<Response> = async (
   { request },

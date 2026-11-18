@@ -24,7 +24,7 @@ npx seamux   # run the board on http://127.0.0.1:54321 and keep it running
 The first run installs the subagent hooks and the dispatch skill Claude Code needs for the board, and says what it changed; `npx seamux uninstall` removes them. Or, from a clone of this repo, `npm install` and then `npm run seamux`, which runs the dev server so a change goes live as soon as it's saved.
 
 - **[Getting started](docs/getting-started.md)**: requirements, installing from npm or a clone, what `setup` changes outside seamux, setting a password, and every setting and environment variable.
-- **[Remote connections](docs/remote-connections.md)**: reaching the board from your phone or another computer, over your own network with mDNS, or from anywhere through a Cloudflare tunnel behind Cloudflare Access.
+- **[Remote connections](docs/remote-connections.md)**: reaching the board from your phone or another computer, over your own network with LAN access, or from anywhere through a Cloudflare tunnel behind Cloudflare Access.
 
 ## How it works
 
@@ -105,7 +105,7 @@ A worker counts as finished only when it writes its `done` marker, not when its 
 ### Rules it keeps
 
 - **It never destroys.** seamux has no command that deletes a session, a worktree or a transcript. When something should go, seamux sends a prompt asking the session that owns it to remove it.
-- **Localhost, unless you open it.** The server binds `127.0.0.1`, and every write checks that the request came from the board itself, so no other website can type into your sessions. The one exception is setting the theme from a script, off unless you turn it on in the Themes tab, which can only pick a saved theme. The only other ways in are the ones the Remote tab switches on: mDNS, only with the board's password, and the Cloudflare tunnel, only with a valid Access token.
+- **Localhost, unless you open it.** The server binds `127.0.0.1`, and every write checks that the request came from the board itself, so no other website can type into your sessions. The one exception is setting the theme from a script, off unless you turn it on in the Themes tab, which can only pick a saved theme. The only other ways in are the ones the Remote tab switches on: LAN access, only with the board's password, and the Cloudflare tunnel, only with a valid Access token.
 
 Whoever can reach the board can type into every session on your Mac, and those sessions can run commands. Treat access to it like access to your terminal. [SECURITY.md](SECURITY.md) says how to report a vulnerability.
 
