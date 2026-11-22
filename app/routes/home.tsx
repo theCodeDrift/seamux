@@ -2014,11 +2014,17 @@ const ORPHANS_NOTE =
 // the board there.
 function BoardMenu({
   remote,
+  outsideCmux,
+  cmuxOnly,
+  onCmuxOnly,
   orphans,
   version,
   now,
 }: {
   remote: RemoteStatus;
+  outsideCmux: number;
+  cmuxOnly: boolean;
+  onCmuxOnly: (on: boolean) => void;
   orphans: Board["orphans"];
   version: Board["version"];
   now: number;
@@ -2053,6 +2059,28 @@ function BoardMenu({
               <Globe className="size-4" />
               <span className="truncate">Remote at {remote.domain}</span>
             </a>
+          )}
+          {(cmuxOnly || outsideCmux > 0) && (
+            <button
+              type="button"
+              className={row}
+              onClick={() => {
+                setOpen(false);
+                onCmuxOnly(!cmuxOnly);
+              }}
+            >
+              {cmuxOnly ? (
+                <Eye className="size-4" />
+              ) : (
+                <EyeOff className="size-4" />
+              )}
+              {cmuxOnly ? "Show chats outside cmux" : "Hide chats outside cmux"}
+              {cmuxOnly && (
+                <span className="ml-auto rounded-full bg-muted px-1.5 py-px text-[0.7rem] tabular-nums">
+                  {outsideCmux}
+                </span>
+              )}
+            </button>
           )}
           {orphans.length > 0 && (
             <button
@@ -2292,13 +2320,21 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   // Attention only shows while a service needs looking at, and Pinned only
   // takes a column while something is pinned.
   const attention = board.attention.filter(showsCard);
-  const pinned = cards.filter((c) => c.pinned);
   // Done is hidden until asked for, and the choice outlives the tab.
   const [showDone, setShowDone] = useLocalStorage("seamux:show-done", false);
+  // Chats with no cmux surface (started in another terminal, or one seamux
+  // can't reach) can be hidden too. Done chats have closed, so they keep to
+  // their own switch.
+  const [cmuxOnly, setCmuxOnly] = useLocalStorage("seamux:cmux-only", false);
+  const outsideCmux = cards.filter((c) => !c.drivable && c.column !== "done");
+  const shown = cmuxOnly
+    ? cards.filter((c) => !outsideCmux.includes(c))
+    : cards;
+  const pinned = shown.filter((c) => c.pinned);
   const columns = COLUMNS.filter((c) => showDone || c !== "done");
   const columnCount = columns.length + (pinned.length > 0 ? 1 : 0);
   const byColumn = (column: Column) =>
-    cards.filter((c) => !c.pinned && c.column === column);
+    shown.filter((c) => !c.pinned && c.column === column);
   // Below md every column shows, Done included: each has a screen of its own.
   const mobileColumns: BoardColumnKey[] = [
     ...(attention.length > 0 ? (["attention"] as const) : []),
@@ -2457,6 +2493,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 </Button>
                 <BoardMenu
                   remote={remote}
+                  outsideCmux={outsideCmux.length}
+                  cmuxOnly={cmuxOnly}
+                  onCmuxOnly={setCmuxOnly}
                   orphans={board.orphans}
                   version={board.version}
                   now={now}
@@ -2500,6 +2539,24 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   {showDone ? <EyeOff /> : <Eye />}
                   {showDone ? "Hide done" : `Show done (${counts.done})`}
                 </Button>
+                {(cmuxOnly || outsideCmux.length > 0) && (
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    className="max-md:hidden"
+                    onClick={() => setCmuxOnly(!cmuxOnly)}
+                    title={
+                      cmuxOnly
+                        ? "Show chats that aren't in a cmux surface"
+                        : "Hide chats that aren't in a cmux surface"
+                    }
+                  >
+                    {cmuxOnly ? <Eye /> : <EyeOff />}
+                    {cmuxOnly
+                      ? `Show outside cmux (${outsideCmux.length})`
+                      : "Hide outside cmux"}
+                  </Button>
+                )}
                 {board.version && (
                   <span
                     className="truncate font-mono text-xs opacity-70"
